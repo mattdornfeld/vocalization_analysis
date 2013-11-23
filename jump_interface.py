@@ -1,10 +1,14 @@
-
 #! /usr/bin/env python
 
 import sqlite3 as lite
 import numpy as np
 import io
 from IPython import embed
+
+"""
+This a class for interacting with jump.db, thee database that stores rat
+calls, fitted curves, and jump points.
+"""
 
 class JumpInterface:
 	def __init__(self, db_path, rat=None):			
@@ -13,7 +17,6 @@ class JumpInterface:
 		self.con = lite.connect(db_path, detect_types=lite.PARSE_DECLTYPES)
 
 		self.rats = self.get_rats()
-		embed()
 		if rat != None:
 			self.change_rat(rat)
 
@@ -25,7 +28,6 @@ class JumpInterface:
 			
 			return np.unique(rats)
 		
-
 	def change_rat(self, rat):
 		if rat[0] != 'V':
 			raise Exception("Invalid rat name.")
@@ -185,23 +187,6 @@ class JumpInterface:
 			cur = self.con.cursor()
 			cur.execute("INSERT INTO signals(rat, Fs, signal) \
 				VALUES(?,?,?)", (self.rat, Fs, signal))
-	
-	def insert_curves(self, curves):
-		with self.con:
-			cur = self.con.cursor()
-			cur.execute("DELETE FROM curves WHERE rat=?", [self.rat])
-			for signal_index in curves.keys():
-				for time_step, s in enumerate(curves[signal_index][0]):
-					 t = curves[curve_number][1][time_step] 
-					 cur.execute("INSERT INTO curves VALUES(? ,?, ?, ?, ?)", (self.rat, signal_index, time_step, s, t))
-
-	def insert_signals(self, signals):
-		with self.con:
-			cur = self.con.cursor()
-			cur.execute("DELETE FROM signal WHERE rat=?", [self.rat])
-			for signal_index in signals.keys():
-				for time_step, s in enumerate(signals[signal_index]):
-					 cur.execute("INSERT INTO signal VALUES(? ,?, ?, ?)", (self.rat, signal_index, time_step, s))
 
 	def delete_signal(self, signal_index):
 		with self.con:
@@ -225,48 +210,20 @@ class JumpInterface:
 				cur.execute("DELETE FROM signals WHERE rat=? AND signal_index=?", (self.rat, signal_index))
 				cur.execute("DELETE FROM curves WHERE rat=? AND signal_index=?", (self.rat, signal_index))				
 				
+	#tells sqlite how to store numpy arrays
 	def __array_to_text(self, arr):
-		#tells sqlite how to store numpy arrays
 		out = io.BytesIO()
 		np.save(out, arr)
 		out.seek(0)
 		
 		return buffer(out.read())
 
-
+	#tells sqlite how to read numpy arrays
 	def __text_to_array(self, text):
-		#tells sqlite how to read numpy arrays
 		out = io.BytesIO(text)
 		out.seek(0)
 
 		return np.load(out)
-
-
-	def refactor(self):
-		from itertools import count
-		with self.con:
-			#embed()
-			cur = self.con.cursor()
-			cur.execute('DROP TABLE IF EXISTS temp_signals')
-			cur.execute('DROP TABLE IF EXISTS temp_curves')
-			cur.execute("CREATE TABLE temp_signals (rat CHAR(2), signal_index INTEGER, signal ARRAY, PRIMARY KEY (rat, signal_index))")
-			cur.execute("CREATE TABLE temp_curves (rat CHAR(2), signal_index INTEGER, curve ARRAY, PRIMARY KEY (rat, signal_index))")
-			for signal_index in count(0,1):
-				print(signal_index)
-				signal = self.get_signal(signal_index)
-				if len(signal) == 0:
-					break
-				cur.execute("INSERT INTO temp_signals (rat, signal_index, signal) VALUES (?,?,?)", (self.rat, signal_index, signal))
-				curve = np.transpose(np.vstack([jdb.t_get_curve(signal_index),jdb.s_get_curve(signal_index)]))
-				cur.execute("INSERT INTO temp_curves (rat, signal_index, curve) VALUES (?,?,?)", (self.rat, signal_index, curve))
-
-	def drop(self):
-		with self.con:
-			cur = self.con.cursor()
-			cur.execute("DROP TABLE signals")
-			cur.execute("DROP TABLE curves")
-			cur.execute("ALTER TABLE temp_signals RENAME TO signals")
-			cur.execute("ALTER TABLE temp_curves RENAME TO curves")
 
 	def close(self):
 		self.con.close()
