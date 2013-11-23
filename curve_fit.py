@@ -141,29 +141,28 @@ def main(dbPath):
 	#signalIndices = np.unique(signalIndices)
 	
 	rats = ji.get_rats()
+	cluster = -1
+	quality = 1
 	for rat in rats:
-		jumps = arrayStack.arrayStack(5)
 		rat = str(rat)
-		ji.change_rat(rat)
-		signal_indices = ji.get_signal_indices_rat()
+		signal_indices = ji.sget_signal_indices(rat)
 		for signal_index in signal_indices:
+			print(signal_index)
 			signal = ji.get_signal(signal_index)
 			mt = mgram(signal)
 			s, t, valid, averageH = fitCurve(mt)
 			signalJumps = jumpFrequencies(s, t, valid)
 			curve = np.append(s,t)
 			curve = curve.reshape((len(s),2))
-			ji.insert_curve(curve) 
+			ji.insert_curve(rat, curve) 
 			
 			for j, jump in enumerate(signalJumps):
 				jump = refineJump(jump, s, t)
 				if jump != []:
-					jumps.push(np.append(jump, signal_index))
-		
-		jumps = jumps.returnArray()
-		cluster = -1 * np.ones(len(jumps))
-		quality = 1 * np.ones(len(jumps))
-		ji.insert_jumps(jumps[:,0:4], jumps[:,4], cluster, quality)  
+					ji.insert_jump(rat, jump, int(signal_index), \
+						cluster, quality) 
+
+		 
 		
 		"""	
 		fig = plt.figure()
