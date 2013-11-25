@@ -45,7 +45,7 @@ class DataInterface:
 		return rat_ids
 
 def get_file_list():
-	root_path = '/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/Graphs+Data/signals'
+	root_path = '/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/Calls/V1-V6'
 	file_list = []
 	for root, _, filenames in os.walk(root_path):
 		for filename in filenames:
@@ -55,7 +55,7 @@ def get_file_list():
 
 def main():
 	db_path = '/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db'
-	ji = jump_interface.JumpInterface(db_path, 'V6')
+	ji = jump_interface.JumpInterface(db_path)
 	null = chr(0) + chr(0)
 	di = DataInterface()
 	file_list = get_file_list()
@@ -64,6 +64,7 @@ def main():
 		di.connect(file)
 		Fs = di.get_Fs()
 		rat_ids = di.get_rat_ids()
+		embed()
 		for mic_num, id in enumerate(rat_ids):
 			if id == null or id == 'V6':
 				break
@@ -76,7 +77,7 @@ def main():
 				if q not in ['v', ' ']:
 					break 
 				signal = di.get_signal(signal_num, mic_num)
-				ji.insert_signal(signal, Fs)
+				#.insert_signal(signal, Fs)
 
 if __name__ == "__main__":
 	main()
