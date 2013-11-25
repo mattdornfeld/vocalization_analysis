@@ -1,3 +1,5 @@
+#! /usr/bin/env python
+
 import libtfr as tfr
 import argparse
 import numpy as np
@@ -10,7 +12,7 @@ import jump_interface
 from IPython import embed
 
 global fs, t_step, nf, nfd
-fs = 250e3 #sampling frequency 
+fs = 300e3 #sampling frequency 
 #number of time steps in original coordinates in one time step of 
 #reassigned coordinate
 t_step = 30	
@@ -150,55 +152,44 @@ def refine_jump(jump, s, ts):
 	
 	return jump
 
-def main(dbPath):
-	ji = jump_interface.JumpInterface(dbPath)
-	#signalIndices = ji.getSignalIndices()
-	#signalIndices = np.unique(signalIndices)
-	
+def main(db_path=\
+	'/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db'):
+
+	ji = jump_interface.JumpInterface(db_path)
 	rats = ji.get_rats()
+	rats = rats[rats != u'V6']
+	signal_indices = np.array([])
+	for r in rats:
+		signal_indices = np.append(signal_indices,ji.sget_signal_indices(r))
+	signal_indices = np.sort(signal_indices)
 	cluster = -1
 	quality = 1
-	for rat in rats:
-		rat = str(rat)
-		signal_indices = ji.sget_signal_indices(rat)
-		for signal_index in signal_indices:
-			print(signal_index)
-			signal = ji.get_signal(signal_index)
-			mt = mgram(signal)
-			s, t, valid, average_h = fit_curve(mt)
-			signalJumps = jump_frequencies(s, t, valid)
-			curve = np.append(s,t)
-			curve = curve.reshape((len(s),2))
-			ji.insert_curve(rat, curve) 
-			
-			for j, jump in enumerate(signalJumps):
-				jump = refine_jump(jump, s, t)
-				if jump != []:
-					ji.insert_jump(rat, jump, int(signal_index), \
-						cluster, quality) 
+	embed()
+	for signal_index in signal_indices:
+		signal = ji.get_signal(signal_index)
+		mt = mgram(signal)
+		s, t, valid, average_h = fit_curve(mt)
+		jumps = jump_frequencies(s, t, valid)
+		rat = ji.get_rat(signal_index)
+		
+		for jump in jumps:
+			jump = refine_jump(jump, s, t)
+			if jump != []:
+				pass
+				ji.insert_jump(rat, jump, int(signal_index), \
+					cluster, quality)
 
-		 
-		
-		"""	
-		fig = plt.figure()
-		ax = fig.add_subplot(111)
-		print(jumps.arrayShape())
-		print(signalJumps.shape)
-		print(jumps.returnArray())
-		make_plot(s, t, signal, signalJumps)
-		plt.show()
-		"""
-		
-		
-
-		
-		
+		s = s.reshape(len(s), 1)
+		t = t.reshape(len(t), 1)
+		curve = np.hstack((t,s))
+		curve = curve.reshape((len(s),2))
+		ji.insert_curve(rat, curve)  
 
 if __name__ == "__main__":
 	#Define command line arguments accepted
 	parser = argparse.ArgumentParser()
-	parser.add_argument("-f", "--dbPath", help="Data path")
+	#parser.add_argument("-f", "--db_path", help="Data path")
 	#parser.add_argument("-r", "--rat", help="ratid")
 	args = parser.parse_args()
 	
-	main(args.dbPath)
+	main()
