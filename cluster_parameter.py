@@ -1,13 +1,13 @@
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import mlab
+from matplotlib.mlab import find
 from matplotlib.path import Path
 import matplotlib.patches as patches
 import sqlite3 as lite
 import jump_interface
 import point_browser
-from math import atan, tan
+from math import atan, tan, sqrt
 from IPython import embed
 
 #linear regression forced through origin
@@ -23,10 +23,12 @@ def regression(x,y):
 def costFunction(jumps, cluster, slopes):
 	cost = 0
 	for i,c in enumerate(np.unique(cluster[cluster!=-1])): 
-		idx = mlab.find(cluster==c)
+		idx = find(cluster==c)
 		l = len(jumps[idx,0:2])
 		for j in jumps[idx,0:2]:
-			cost += abs(j[0]*slopes[i] - j[1])**2/l	
+			x = (j[0] / slopes[i] + j[1]) / (slopes[i] + 1 / slopes[i])
+			y = slopes[i] * x
+			cost += (((j[0] - x)**2 + (j[1]-y)**2)) / l 
 	
 	return cost
 
@@ -34,7 +36,7 @@ def costFunction(jumps, cluster, slopes):
 def costFunction2(jumps, cluster, slopes):
 	cost = 0
 	for i,c in enumerate(np.unique(cluster[cluster!=-1])): 
-		idx = mlab.find(cluster==c)
+		idx = find(cluster==c)
 		l = len(jumps[idx,0:2])
 		cost=0
 		for j in jumps[idx,0:2]:
@@ -73,30 +75,30 @@ def polygonVertices(slopes, minf = 20e3, maxf = 85e3):
 
 #creates polygons based on the lines in slopes and checks to see which jumps are in which polygon
 def polyCluster(jumps, vertices, codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY]):
-	cluster = -1*np.ones(len(jumps))
-	nClusters = len(vertices)
+	cluster = np.zeros(len(jumps))
+	num_clusters = len(vertices)
 	for iv, v in enumerate(vertices):
 		poly = Path(v, codes, closed = True)
 		for ij, j in enumerate(jumps):
 			if poly.contains_point(j)==1:
-				cluster[ij] = iv
+				cluster[ij] = iv + 1
 	
 	return cluster
 
 #shuffle the points around between neighboring clusters to minimize error
 def shuffle(jumps, cluster, slopes):
-	nClusters = int(np.amax(cluster)+1)
+	num_clusters = int(np.amax(cluster)+1)
 	for ij, j in enumerate(jumps):
 		c = cluster[ij]
 		if c==-1: continue
 		e1 = j[1]-slopes[c]*j[0] #original error
 		#handle edge cases first 
-		if (c==0 and e1<0) or (c==nClusters-1 and e1>0): 
+		if (c==0 and e1<0) or (c==num_clusters-1 and e1>0): 
 			continue
 		elif c==0 and e1>0:
 			e2 = j[1]-slopes[c+1]*j[0]
 			if abs(e2)<abs(e1): cluster[ij]=c+1
-		elif c==nClusters-1 and e1<0:
+		elif c==num_clusters-1 and e1<0:
 			e2 = j[1]-slopes[c-1]*j[0]
 			if abs(e2)<abs(e1): cluster[ij]=c-1
 		else:
@@ -112,7 +114,7 @@ def shuffle(jumps, cluster, slopes):
 	return cluster
 		
 def plotJumps(jumps, cluster, slopes):
-	nClusters = len(slopes)
+	num_clusters = len(slopes)
 	fig1 = plt.figure()
 	ax1 = fig1.add_subplot(111, aspect='equal')
 	ax1.set_title('After Jump Frequency Vs Before Jump Frequency')
@@ -122,15 +124,15 @@ def plotJumps(jumps, cluster, slopes):
 	transitions = transitions+[str(n)+' to ' +str(n+1) for n in range(5,1,-1)]
 
 
-	for n in xrange(0,nClusters):
+	for n in xrange(0,num_clusters):
 		#plot the data set a second time and color code them by cluster
-		idx = mlab.find(cluster==n)
+		idx = find(cluster==n)
 		if len(idx)==0: continue
 		minf = np.amin(jumps[idx,:][:,0])
 		maxf = np.amax(jumps[idx,:][:,0])
 		f = np.arange(minf, maxf, 100)
-		line, = ax1.plot(jumps[idx,:][:,0],jumps[idx,:][:,1], 'o', markersize=2, color = plt.get_cmap('jet')((float(n)+1)/(nClusters)))
-		line, = ax1.plot(f, slopes[n]*f, color = plt.get_cmap('jet')((float(n)+1)/(nClusters)), linewidth=1.3, label=transitions[n])
+		line, = ax1.plot(jumps[idx,:][:,0],jumps[idx,:][:,1], 'o', markersize=2, color = plt.get_cmap('jet')((float(n)+1)/(num_clusters)))
+		line, = ax1.plot(f, slopes[n]*f, color = plt.get_cmap('jet')((float(n)+1)/(num_clusters)), linewidth=1.3, label=transitions[n])
 	ax1.legend()
 
 def plotPolygons(vertices, slopes):
@@ -140,7 +142,7 @@ def plotPolygons(vertices, slopes):
 	ax2.set_xlabel('F1')
 	ax2.set_ylabel('F2')
 	x = np.arange(20e3, 85e3, 100)
-	nClusters=len(slopes)
+	num_clusters=len(slopes)
 	codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY]
 	
 	#for m in slopes:
@@ -149,8 +151,8 @@ def plotPolygons(vertices, slopes):
 	for n,v in enumerate(vertices):
 		ax2.plot(v[:,0], v[:,1], 'ro')
 		poly = Path(v, codes, closed = True)
-		print(plt.get_cmap('jet')((float(n)+1)/(nClusters-1)))
-		patch = patches.PathPatch(poly, facecolor = plt.get_cmap('jet')((float(n)+1)/(nClusters)), lw=2)
+		print(plt.get_cmap('jet')((float(n)+1)/(num_clusters-1)))
+		patch = patches.PathPatch(poly, facecolor = plt.get_cmap('jet')((float(n)+1)/(num_clusters)), lw=2)
 		ax2.add_patch(patch)	
 
 def findSlopes(r):
@@ -172,7 +174,7 @@ def sort_jumps(jumps, signal_indices, cluster):
 	distance = distance[idx]
 	signal_indices = signal_indices[idx]  
 	for c in np.unique(cluster):
-		idx1 = mlab.find(cluster == c)
+		idx1 = find(cluster == c)
 		j = jumps[idx1,:]
 		idx2 = distance[idx1].argsort()
 		sorted_jumps[idx1,:] = jumps[idx1,:][idx2,:]
@@ -180,31 +182,28 @@ def sort_jumps(jumps, signal_indices, cluster):
 	
 	return sorted_jumps, sorted_signal_indices, cluster
 
-def insert_jumps(jdb, jumps, signal_indices, cluster):
+def insert_jumps(ji, jumps, signal_indices, cluster):
 	#put the bad jumps on top
 	q1 = np.ones((len(jumps)))
-	q0 = jdb.get_jump_indices_quality(0)
-	bad_jumps = jdb.get_jumps()[q0]
-	bad_signal_indices = jdb.get_signal_indices()[q0]
+	q0 = ji.get_jump_indices_quality(0)
+	bad_jumps = ji.get_jumps()[q0]
+	bad_signal_indices = ji.get_signal_indices()[q0]
 	bad_cluster = -1 * np.ones(len(bad_jumps))
 	jumps = np.vstack((jumps, bad_jumps))
 	#embed()
 	signal_indices = np.concatenate((signal_indices, bad_signal_indices))
 	cluster = np.concatenate((cluster, bad_cluster))
 	quality = np.concatenate((q1,q0))
-	jdb.insert_jumps(jumps, signal_indices, cluster, quality)
+	ji.insert_jumps(jumps, signal_indices, cluster, quality)
 
 
-def main():
+def main(ji, rat):
 	#Organize input from db and command line
-	dbPath = args.fileName
-	rat = args.rat
-	jdb = jump_interface.JumpInterface(dbPath, rat)
-	jumps = jdb.get_jumps()
-	signal_indices = jdb.get_signal_indices()
-	q1 = jdb.get_jump_indices_quality(1)
-	jumps = jumps[q1]
-	signal_indices = signal_indices[q1]
+	#dbPath = args.fileName
+	#rat = args.rat
+	jumps = ji.get_jumps(rat)
+	signal_indices = ji.jget_signal_indices(rat)
+	jump_indices = ji.get_jump_indices(rat)
 	
 	#Brute force through different values of r(theta)
 	#Find error of each one
@@ -221,30 +220,38 @@ def main():
 		e.append(costFunction(jumps[:,0:2], cluster, slopes))
 	
 	#take r with min eror
-	rmin = rationals[np.where(e[1:-1]==min(e[1:-1]))][0]
+	e = np.array(e)
+	rmin = rationals[np.where(e==min(e))][0]
 	print('rmin=' + str(rmin)) 
 	slopes = findSlopes(rmin)
 	bisectingSlopes= findBisector(slopes)
 	vertices = polygonVertices(bisectingSlopes)
 	cluster = polyCluster(jumps[:,0:2], vertices)
-	jumps, signal_indices, cluster = sort_jumps(jumps, signal_indices, cluster)
-	
-	#insert_jumps(jdb, jumps, signal_indices, cluster)
-	#point_browser.PointBrowser(jdb)
 
-	plotJumps(jumps[:,0:2], cluster, slopes)
-	plotPolygons(vertices, slopes)
+	#plotJumps(jumps[:,0:2], cluster, slopes)
+	#plotPolygons(vertices, slopes)
 	fig2 = plt.figure()
 	ax2 = fig2.add_subplot(111)
 	ax2.plot(rationals, e)
 	ax2.set_xlabel('theta')
 	ax2.set_ylabel('error')
-	plt.show()
+	fig2.show()
+	#plt.show()
+
+	return cluster
+	"""
+	for jump_index in jump_indices:
+		ji.update_cluster(jump_index, cluster)
+	#point_browser.PointBrowser(ji)
+	"""
+	
 
 if __name__ == "__main__":
 	#Define command line arguments accepted
 	parser = argparse.ArgumentParser()
-	parser.add_argument("-f", "--fileName", help="Data path")
+	#parser.add_argument("-f", "--fileName", help="Data path")
 	parser.add_argument("-r", "--rat", help="Rat Name")
+	dbPath = '/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db'
+	ji = jump_interface.JumpInterface(dbPath)
 	args = parser.parse_args()
-	main()
+	main(ji, args.rat)
