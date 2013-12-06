@@ -9,6 +9,16 @@ import jump_interface
 import point_browser
 from math import atan, tan, sqrt
 from IPython import embed
+from functools import partial
+
+
+def slope(n1, n2, r):
+	return float(n2-r) / (n1-r)
+
+NUM_CLUSTERS = 8
+SLOPES = {0: partial(slope,3,2), 1: partial(slope,4,3), 2: partial(slope,5,4),
+3:partial(slope,6,5), 4: partial(slope,5,6), 5:partial(slope,4,5), 
+6:partial(slope,3,4), 7:partial(slope,2,3)} 
 
 #linear regression forced through origin
 def regression(x,y):
@@ -47,7 +57,7 @@ def costFunction2(jumps, cluster, slopes):
 	return cost
 
 #takes an array of slopes and returns the slopes of the bisectors of these lines sorted along with the original slopes	
-def findBisector(slopes):
+def find_bisector(slopes):
 	bisectingSlopes = np.zeros(len(slopes)-1)
 	for i, m1 in enumerate(slopes):
 		if i == len(slopes)-1:
@@ -58,7 +68,7 @@ def findBisector(slopes):
 	return bisectingSlopes
 
 #takes slopes of lines, min, and max x values. returns vertices of quadrigon that lie on lines at min and max values. 
-def polygonVertices(slopes, minf = 20e3, maxf = 85e3):
+def polygon_vertices(slopes, minf = 20e3, maxf = 85e3):
 	vertices = [0 for x in range(len(slopes)+1)]	
 	
 	for i, m1 in enumerate(slopes):
@@ -74,31 +84,31 @@ def polygonVertices(slopes, minf = 20e3, maxf = 85e3):
 	return vertices
 
 #creates polygons based on the lines in slopes and checks to see which jumps are in which polygon
-def polyCluster(jumps, vertices, codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY]):
-	cluster = np.zeros(len(jumps))
-	num_clusters = len(vertices)
+def poly_cluster(jumps, vertices, codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY]):
+	cluster = -1*np.ones(len(jumps))
+	nClusters = len(vertices)
 	for iv, v in enumerate(vertices):
 		poly = Path(v, codes, closed = True)
 		for ij, j in enumerate(jumps):
 			if poly.contains_point(j)==1:
-				cluster[ij] = iv + 1
+				cluster[ij] = iv
 	
 	return cluster
 
 #shuffle the points around between neighboring clusters to minimize error
 def shuffle(jumps, cluster, slopes):
-	num_clusters = int(np.amax(cluster)+1)
+	nClusters = int(np.amax(cluster)+1)
 	for ij, j in enumerate(jumps):
 		c = cluster[ij]
 		if c==-1: continue
 		e1 = j[1]-slopes[c]*j[0] #original error
 		#handle edge cases first 
-		if (c==0 and e1<0) or (c==num_clusters-1 and e1>0): 
+		if (c==0 and e1<0) or (c==nClusters-1 and e1>0): 
 			continue
 		elif c==0 and e1>0:
 			e2 = j[1]-slopes[c+1]*j[0]
 			if abs(e2)<abs(e1): cluster[ij]=c+1
-		elif c==num_clusters-1 and e1<0:
+		elif c==nClusters-1 and e1<0:
 			e2 = j[1]-slopes[c-1]*j[0]
 			if abs(e2)<abs(e1): cluster[ij]=c-1
 		else:
@@ -113,8 +123,8 @@ def shuffle(jumps, cluster, slopes):
 	
 	return cluster
 		
-def plotJumps(jumps, cluster, slopes):
-	num_clusters = len(slopes)
+def plot_jumps(jumps, cluster, slopes):
+	nClusters = len(slopes)
 	fig1 = plt.figure()
 	ax1 = fig1.add_subplot(111, aspect='equal')
 	ax1.set_title('After Jump Frequency Vs Before Jump Frequency')
@@ -124,25 +134,25 @@ def plotJumps(jumps, cluster, slopes):
 	transitions = transitions+[str(n)+' to ' +str(n+1) for n in range(5,1,-1)]
 
 
-	for n in xrange(0,num_clusters):
+	for n in xrange(0,nClusters):
 		#plot the data set a second time and color code them by cluster
 		idx = find(cluster==n)
 		if len(idx)==0: continue
 		minf = np.amin(jumps[idx,:][:,0])
 		maxf = np.amax(jumps[idx,:][:,0])
 		f = np.arange(minf, maxf, 100)
-		line, = ax1.plot(jumps[idx,:][:,0],jumps[idx,:][:,1], 'o', markersize=2, color = plt.get_cmap('jet')((float(n)+1)/(num_clusters)))
-		line, = ax1.plot(f, slopes[n]*f, color = plt.get_cmap('jet')((float(n)+1)/(num_clusters)), linewidth=1.3, label=transitions[n])
+		line, = ax1.plot(jumps[idx,:][:,0],jumps[idx,:][:,1], 'o', markersize=2, color = plt.get_cmap('jet')((float(n)+1)/(nClusters)))
+		line, = ax1.plot(f, slopes[n]*f, color = plt.get_cmap('jet')((float(n)+1)/(nClusters)), linewidth=1.3, label=transitions[n])
 	ax1.legend()
 
-def plotPolygons(vertices, slopes):
+def plot_polygons(vertices, slopes):
 	fig2 = plt.figure()
 	ax2 = fig2.add_subplot(111) #, aspect='equal')
 	ax2.set_title('Illustration of Polygon Clustering Technique')
 	ax2.set_xlabel('F1')
 	ax2.set_ylabel('F2')
 	x = np.arange(20e3, 85e3, 100)
-	num_clusters=len(slopes)
+	nClusters=len(slopes)
 	codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY]
 	
 	#for m in slopes:
@@ -151,17 +161,9 @@ def plotPolygons(vertices, slopes):
 	for n,v in enumerate(vertices):
 		ax2.plot(v[:,0], v[:,1], 'ro')
 		poly = Path(v, codes, closed = True)
-		print(plt.get_cmap('jet')((float(n)+1)/(num_clusters-1)))
-		patch = patches.PathPatch(poly, facecolor = plt.get_cmap('jet')((float(n)+1)/(num_clusters)), lw=2)
+		print(plt.get_cmap('jet')((float(n)+1)/(nClusters-1)))
+		patch = patches.PathPatch(poly, facecolor = plt.get_cmap('jet')((float(n)+1)/(nClusters)), lw=2)
 		ax2.add_patch(patch)	
-
-def findSlopes(r):
-	slopes = [(n+1-r)/(n-r) for n in range(2,6)]
-	slopes[len(slopes):]=([(n-r)/(n+1-r) for n in range(5,1,-1)])
-	slopes = np.array(slopes)
-	slopes = np.sort(slopes)
-
-	return slopes
 
 #sort jumps first based on cluster then based on distance from the origin	
 def sort_jumps(jumps, signal_indices, cluster):
@@ -197,7 +199,7 @@ def insert_jumps(ji, jumps, signal_indices, cluster):
 	ji.insert_jumps(jumps, signal_indices, cluster, quality)
 
 
-def main(ji, rat):
+def main(ji, rat, included_clusters = range(NUM_CLUSTERS) ):
 	#Organize input from db and command line
 	#dbPath = args.fileName
 	#rat = args.rat
@@ -207,29 +209,29 @@ def main(ji, rat):
 	
 	#Brute force through different values of r(theta)
 	#Find error of each one
-	rationals = np.arange(0,1,0.01)
+	rationals = np.arange(-1,1,0.01)
 	rTrue = 0
 	e = []
 	for r in rationals:
 		print(r)
-		slopes = findSlopes(r)
-		bisectingSlopes= findBisector(slopes)
-		vertices = polygonVertices(bisectingSlopes)
-		cluster = polyCluster(jumps[:,0:2], vertices)
+		slopes = np.array([SLOPES[n](r) for n in included_clusters])
+		bisectingSlopes= find_bisector(slopes)
+		vertices = polygon_vertices(bisectingSlopes)
+		cluster = poly_cluster(jumps[:,0:2], vertices)
 		cluster = shuffle(jumps[:,0:2], cluster, slopes)
 		e.append(costFunction(jumps[:,0:2], cluster, slopes))
 	
 	#take r with min eror
 	e = np.array(e)
-	rmin = rationals[np.where(e==min(e))][0]
-	print('rmin=' + str(rmin)) 
-	slopes = findSlopes(rmin)
-	bisectingSlopes= findBisector(slopes)
-	vertices = polygonVertices(bisectingSlopes)
-	cluster = polyCluster(jumps[:,0:2], vertices)
+	r_min = rationals[np.where(e==min(e))][0]
+	print('r_min=' + str(r_min)) 
+	slopes = np.array([SLOPES[n](r_min) for n in included_clusters])
+	bisectingSlopes= find_bisector(slopes)
+	vertices = polygon_vertices(bisectingSlopes)
+	cluster = poly_cluster(jumps[:,0:2], vertices)
 
-	#plotJumps(jumps[:,0:2], cluster, slopes)
-	#plotPolygons(vertices, slopes)
+	#plot_jumps(jumps[:,0:2], cluster, slopes)
+	#plot_polygons(vertices, slopes)
 	fig2 = plt.figure()
 	ax2 = fig2.add_subplot(111)
 	ax2.plot(rationals, e)
@@ -238,7 +240,7 @@ def main(ji, rat):
 	fig2.show()
 	#plt.show()
 
-	return cluster
+	return cluster, slopes
 	"""
 	for jump_index in jump_indices:
 		ji.update_cluster(jump_index, cluster)

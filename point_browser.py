@@ -6,17 +6,23 @@ import numpy as np
 import libtfr as tfr
 from IPython import embed
 import brewer2mpl as brew
+from sets import Set
+
 
 """
 Class for investigating jumps. It plots the after vs before jump freqs.You 
 can click on them to display the reassinged spectrogram in another window.
 """
+NUM_CLUSTERS = 8
 COLOR_MAP = brew.get_map('Set3', 'qualitative', 10).mpl_colors
 LEGEND = {-1:("unclustered", COLOR_MAP[1]), 0:("3 to 2", COLOR_MAP[0]), 
 1:("4 to 3", COLOR_MAP[2]), 2:("5 to 4", COLOR_MAP[3]), 
 3:("6 to 5", COLOR_MAP[4]), 4:("5 to 6", COLOR_MAP[5]), 
 5:("4 to 5", COLOR_MAP[6]), 6:("3 to 4", COLOR_MAP[7]), 
 7:("2 to 3", COLOR_MAP[8])}
+
+REVERSE_LEGEND = {"unclustered": -1, "3 to 2": 0, "4 to 3": 1, "5 to 4": 2, 
+"6 to 5": 3, "5 to 6": 4, "4 to 5": 5, "3 to 4": 6, "2 to 3": 7}
 
 class PointBrowser:
 	def __init__(self, rat, ji):
@@ -26,10 +32,12 @@ class PointBrowser:
 			raise Exception("That rat doesn't exist.")
 
 		self.clusters = dict()
+		self.included_clusters = dict()
 		self.slopes = dict()
 		for r in self.rats:
 			l = len(ji.get_jumps(r))
-			self.clusters[r] = -1 * np.ones(l) 
+			self.clusters[r] = -1 * np.ones(l)
+			self.included_clusters[r] = range(NUM_CLUSTERS)
 			self.slopes[r] = []
 
 		self.rat_index = np.where(self.rats == rat)[0][0]
@@ -64,6 +72,7 @@ class PointBrowser:
 			#create figures
 			self.fig_jumps = plt.figure()
 			self.fig_mgram = plt.figure()
+			self.fig_hist = plt.figure()
 			
 			#Connect click and press events to callback functions
 			self.fig_jumps.canvas.mpl_connect('key_press_event', self.on_press)
@@ -73,21 +82,27 @@ class PointBrowser:
 			self.fig_jumps.canvas.mpl_connect('pick_event', self.on_pick)
 			
 			#create axes
-			self.ax_jumps = self.fig_jumps.add_subplot(111)
+			self.ax_jumps = self.fig_jumps.add_subplot(111, aspect='equal')
 			self.ax_mgram = self.fig_mgram.add_subplot(111)
+			self.ax_hist = self.fig_hist.add_subplot(111)
 
 			#create cluster checker
-			rect = [0.00, 0.8, 0.1, 0.15]
-			button_axis = self.fig_jumps.add_axes(rect)
-			labels = tuple(LEGEND[n][0] for n in range(8))
-			actives = tuple(False for n in range(8))
-			check = CheckButtons(button_axis, labels, actives)
-			check.on_clicked(self.on_check)  
+			rect = [0.00, 0.7, 0.1, 0.25] #l,b,w,h
+			self.ax_checker = self.fig_jumps.add_axes(rect)
 
 
 		else:
 			self.ax_jumps.cla()
 			self.ax_mgram.cla()
+			self.ax_hist.cla()
+			self.ax_checker.cla()
+
+		#update cluster checker
+		labels = tuple(LEGEND[n][0] for n in range(NUM_CLUSTERS))
+		actives = tuple(n in self.included_clusters[self.rat] 
+			for n in range(NUM_CLUSTERS))
+		self.check = CheckButtons(self.ax_checker, labels, actives)
+		self.check.on_clicked(self.on_check) 
 
 		#set axes properties
 		title = (str(self.rat) + " After Jump Frequency Vs Before Jump"  
@@ -109,36 +124,60 @@ class PointBrowser:
 				self.jumps[idx][:,1],'o',markersize=2.3, 
 				color = LEGEND[n][1], label = LEGEND[n][0])
 		#plot clustered jumps
-		for n in range(8):
+		for n in range(len(self.slopes[self.rat])):
 			idx = np.where(self.clusters[self.rat]==n)[0]
 			print(str(n)+':'+str(len(idx)))
 			line, = self.ax_jumps.plot(self.jumps[idx][:,0], 
 				self.jumps[idx][:,1],'o',markersize=2.3, 
 				color = LEGEND[n][1], label = LEGEND[n][0])
 			if len(self.slopes[self.rat]) != 0:
+				print(n)
 				line, = self.ax_jumps.plot(f, f*self.slopes[self.rat][n], 
 					color = LEGEND[n][1])
 
-		self.ax_jumps.legend()
-		
+		#plot histogram
+		hist, bins = np.histogram(self.jumps[:,1]/self.jumps[:,0], bins=50)
+		width = 0.7 * (bins[1] - bins[0])
+		center = (bins[:-1] + bins[1:]) / 2
+		self.ax_hist.bar(center, hist, align='center', width=width)
+
+		#create legend self.ax_jumps.legend()
+		handles, labels = self.ax_jumps.get_legend_handles_labels()
+		rect = [0.1, 0.8, 0.1, 0.15] #l,b,w,h
+		self.ax_legend = self.fig_jumps.add_axes(rect)
+		self.ax_legend.get_xaxis().set_visible(False)
+		self.ax_legend.get_yaxis().set_visible(False)
+		self.ax_legend.set_axis_bgcolor((0.75, 0.75, 0.75, 1.0))
+		self.ax_legend.set_frame_on(False)
+		self.ax_legend.legend(handles, labels, markerscale=3)
+
 		self.selected,= self.ax_jumps.plot([self.jumps[0,0]], 
 			[self.jumps[0,1]], 'o', color='red', visible=False)
 		self.ax_jumps.set_xlim(f[0], f[-1])
 		self.ax_jumps.set_ylim(f[0], f[-1])
 		self.fig_jumps.canvas.draw()
 		self.fig_mgram.canvas.draw()
+		self.fig_hist.canvas.draw()
 
 		#embed()
 	
 	def on_check(self, label):
-		print(label)
-		print(1)
+		cluster = REVERSE_LEGEND[label]
+		if cluster in self.included_clusters[self.rat]:
+			self.included_clusters[self.rat].remove(cluster)
+		else:
+			self.included_clusters[self.rat].insert(cluster, cluster)
+
 		self.fig_jumps.canvas.draw()
 	
 	def cluster_data(self, event):
 		if event.key != "ctrl+" + 'C': return
-		self.clusters[self.rat], self.slopes[self.rat] = cluster_parameter.main(self.ji, self.rat)
+		self.clusters[self.rat], self.slopes[self.rat] = cluster_parameter.main(self.ji, self.rat, self.included_clusters[self.rat])
 		self.setup_figures()
+		for n, m in zip(self.included_clusters[self.rat], self.slopes[self.rat]):
+			label = LEGEND[n][0]
+			top = self.ax_hist.get_ylim()[1]
+			self.ax_hist.annotate(label, (m, top))
 
 	
 	def on_press(self, event):
@@ -162,8 +201,7 @@ class PointBrowser:
 		self.get_signal_data()
 		self.graph_mgram()
 	
-	def on_pick(self, event):	
-		print(event)	
+	def on_pick(self, event):		
 		#event.ind is the list of all jump points within a certain
 		#distance of selected point 
 		N = len(event.ind)
