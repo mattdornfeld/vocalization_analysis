@@ -1,28 +1,35 @@
 import jump_interface
 import cluster_parameter
 import matplotlib.pyplot as plt
-from matplotlib.widgets import CheckButtons
+from matplotlib.widgets import CheckButtons, LassoSelector, RadioButtons 
+from matplotlib.path import Path
 import numpy as np
 import libtfr as tfr
 from IPython import embed
 import brewer2mpl as brew
-from sets import Set
+from operator import not_
 
 
 """
 Class for investigating jumps. It plots the after vs before jump freqs.You 
 can click on them to display the reassinged spectrogram in another window.
 """
-NUM_CLUSTERS = 8
-COLOR_MAP = brew.get_map('Set3', 'qualitative', 10).mpl_colors
-LEGEND = {-1:("unclustered", COLOR_MAP[1]), 0:("3 to 2", COLOR_MAP[0]), 
-1:("4 to 3", COLOR_MAP[2]), 2:("5 to 4", COLOR_MAP[3]), 
-3:("6 to 5", COLOR_MAP[4]), 4:("5 to 6", COLOR_MAP[5]), 
-5:("4 to 5", COLOR_MAP[6]), 6:("3 to 4", COLOR_MAP[7]), 
-7:("2 to 3", COLOR_MAP[8])}
 
-REVERSE_LEGEND = {"unclustered": -1, "3 to 2": 0, "4 to 3": 1, "5 to 4": 2, 
-"6 to 5": 3, "5 to 6": 4, "4 to 5": 5, "3 to 4": 6, "2 to 3": 7}
+COLOR_MAP = (brew.get_map('Set3', 'qualitative', 10).mpl_colors +
+	brew.get_map('Set2', 'qualitative', 6).mpl_colors)
+
+LEGEND = {-1:("unclustered", COLOR_MAP[1]), 0:("2 to 1", COLOR_MAP[0]), 
+1:("3 to 2", COLOR_MAP[2]), 2:("4 to 3", COLOR_MAP[3]), 
+3:("5 to 4", COLOR_MAP[4]), 4:("6 to 5", COLOR_MAP[5]), 
+5:("5 to 6", COLOR_MAP[6]), 6:("4 to 5", COLOR_MAP[7]), 
+7:("3 to 4", COLOR_MAP[8]), 8:("2 to 3", COLOR_MAP[9]), 
+9:("1 to 2", COLOR_MAP[10])}
+
+REVERSE_LEGEND = {"unclustered": -1, "2 to 1": 0, "3 to 2": 1, "4 to 3": 2, 
+"5 to 4": 3, "6 to 5": 4, "5 to 6": 5, "4 to 5": 6, "3 to 4": 7, "2 to 3": 8,
+"1 to 2": 9}
+
+NUM_CLUSTERS = len(LEGEND) - 1
 
 class PointBrowser:
 	def __init__(self, rat, ji):
@@ -33,16 +40,21 @@ class PointBrowser:
 
 		self.clusters = dict()
 		self.included_clusters = dict()
+		self.jumps = dict()
+		self.signal_indices = dict()
 		self.slopes = dict()
 		for r in self.rats:
 			l = len(ji.get_jumps(r))
 			self.clusters[r] = -1 * np.ones(l)
-			self.included_clusters[r] = range(NUM_CLUSTERS)
+			#by default don't include 1 to 2 or 2 to 1
+			self.included_clusters[r] = range(1, NUM_CLUSTERS-1) 
+			self.jumps[r] = ji.get_jumps(r)
+			self.signal_indices[r] = ji.jget_signal_indices(r)
 			self.slopes[r] = []
 
 		self.rat_index = np.where(self.rats == rat)[0][0]
 		self.rat = rat
-		self.initialize()
+		self.setup_figures()
 		plt.show()
 
 		
@@ -54,20 +66,20 @@ class PointBrowser:
 			self.rat_index = (self.rat_index - 1)%len(self.rats)
 		
 		self.rat = self.rats[self.rat_index]
-		self.initialize()
+		self.setup_figures()
 
 	
-	def initialize(self):
-		self.jump_index = 0
-		print(self.rat)
-
-		#load data from db
-		self.jumps = ji.get_jumps(self.rat)
-		self.signal_indices = ji.jget_signal_indices(self.rat)
+	def reload_defaults(self, event):
+		if event.key != "ctrl+" + 'R': return
+		self.jumps[self.rat] = ji.get_jumps(self.rat)
+		self.signal_indices[self.rat] = ji.jget_signal_indices(self.rat)
+		self.clusters[self.rat] = -1 * np.ones(len(self.jumps[self.rat])) 
 
 		self.setup_figures()
 
 	def setup_figures(self):
+		self.jump_index = 0
+		print(self.rat)
 		if 'fig_jumps' not in self.__dict__.keys():
 			#create figures
 			self.fig_jumps = plt.figure()
@@ -75,11 +87,12 @@ class PointBrowser:
 			self.fig_hist = plt.figure()
 			
 			#Connect click and press events to callback functions
+			self.fig_jumps.canvas.mpl_connect('key_press_event', self.reload_defaults)
 			self.fig_jumps.canvas.mpl_connect('key_press_event', self.on_press)
 			self.fig_jumps.canvas.mpl_connect('key_press_event', self.change_rat)
 			self.fig_jumps.canvas.mpl_connect('key_press_event', self.cluster_data)
 			self.fig_mgram.canvas.mpl_connect('key_press_event', self.on_press)
-			self.fig_jumps.canvas.mpl_connect('pick_event', self.on_pick)
+			self.picker = self.fig_jumps.canvas.mpl_connect('pick_event', self.on_pick)
 			
 			#create axes
 			self.ax_jumps = self.fig_jumps.add_subplot(111, aspect='equal')
@@ -89,6 +102,13 @@ class PointBrowser:
 			#create cluster checker
 			rect = [0.00, 0.7, 0.1, 0.25] #l,b,w,h
 			self.ax_checker = self.fig_jumps.add_axes(rect)
+
+			#create lasso/point selector toggles
+			rect = [0.00, 0.4, 0.1, 0.25] #l,b,w,h
+			self.ax_toggle = self.fig_jumps.add_axes(rect)
+			labels = ["Point Selector", "Exclusive Lasso", "Inclusive Lasso"]
+			self.toggle = RadioButtons(self.ax_toggle, labels, 0)
+			self.toggle.on_clicked(self.selection_mode)
 
 
 		else:
@@ -112,31 +132,32 @@ class PointBrowser:
 		self.ax_jumps.set_ylabel('F2')
 
 		#plot jumps invisibly for click selector
-		line,=self.ax_jumps.plot(self.jumps[:,0],self.jumps[:,1],'o', 
+		line,=self.ax_jumps.plot(self.jumps[self.rat][:,0], 
+			self.jumps[self.rat][:,1],'o', 
 			markersize=2, visible = False , picker=5)
 
 		f = np.arange(20e3, 80e3, 100)
 		
-		#plot unclustered juumps first
+		#plot unclustered jumps first
 		n = -1
 		idx = np.where(self.clusters[self.rat]==n)[0]
-		line, = self.ax_jumps.plot(self.jumps[idx][:,0], 
-				self.jumps[idx][:,1],'o',markersize=2.3, 
+		line, = self.ax_jumps.plot(self.jumps[self.rat][idx][:,0], 
+				self.jumps[self.rat][idx][:,1],'o',markersize=2.3, 
 				color = LEGEND[n][1], label = LEGEND[n][0])
 		#plot clustered jumps
-		for n in range(len(self.slopes[self.rat])):
-			idx = np.where(self.clusters[self.rat]==n)[0]
-			print(str(n)+':'+str(len(idx)))
-			line, = self.ax_jumps.plot(self.jumps[idx][:,0], 
-				self.jumps[idx][:,1],'o',markersize=2.3, 
-				color = LEGEND[n][1], label = LEGEND[n][0])
+		for c in self.included_clusters[self.rat]:
+			idx = np.where(self.clusters[self.rat]==c)[0]
+			print(str(c)+':'+str(len(idx)))
+			print(LEGEND[c])
+			line, = self.ax_jumps.plot(self.jumps[self.rat][idx][:,0], 
+				self.jumps[self.rat][idx][:,1], 'o', markersize=2.3, 
+				color = LEGEND[c][1], label = LEGEND[c][0])
 			if len(self.slopes[self.rat]) != 0:
-				print(n)
-				line, = self.ax_jumps.plot(f, f*self.slopes[self.rat][n], 
-					color = LEGEND[n][1])
+				line, = self.ax_jumps.plot(f, f*self.slopes[self.rat][c], 
+					color = LEGEND[c][1])
 
 		#plot histogram
-		hist, bins = np.histogram(self.jumps[:,1]/self.jumps[:,0], bins=50)
+		hist, bins = np.histogram(self.jumps[self.rat][:,1]/self.jumps[self.rat][:,0], bins=50)
 		width = 0.7 * (bins[1] - bins[0])
 		center = (bins[:-1] + bins[1:]) / 2
 		self.ax_hist.bar(center, hist, align='center', width=width)
@@ -151,16 +172,51 @@ class PointBrowser:
 		self.ax_legend.set_frame_on(False)
 		self.ax_legend.legend(handles, labels, markerscale=3)
 
-		self.selected,= self.ax_jumps.plot([self.jumps[0,0]], 
-			[self.jumps[0,1]], 'o', color='red', visible=False)
+		#plot red dot
+		self.selected,= self.ax_jumps.plot([self.jumps[self.rat][0,0]], 
+			[self.jumps[self.rat][0,1]], 'o', color='red', visible=False)
+		
+		#set axis limits
 		self.ax_jumps.set_xlim(f[0], f[-1])
 		self.ax_jumps.set_ylim(f[0], f[-1])
+		
+		#draw stuff
 		self.fig_jumps.canvas.draw()
 		self.fig_mgram.canvas.draw()
 		self.fig_hist.canvas.draw()
 
-		#embed()
-	
+	def selection_mode(self, label):
+		labels = ["Point Selector", "Exclusive Lasso", "Inclusive Lasso"]
+		if label == labels[0]:
+			if 'lasso' in self.__dict__.keys():
+				self.lasso.disconnect_events()
+			self.fig_jumps.canvas.mpl_connect('pick_event', self.on_pick)
+		elif label == labels[1]:
+			self.lasso = LassoSelector(self.ax_jumps, self.exclusive_on_lasso)
+			self.fig_jumps.canvas.mpl_disconnect(self.picker)
+		elif label == labels[2]:
+			self.lasso = LassoSelector(self.ax_jumps, self.inclusive_on_lasso)
+			self.fig_jumps.canvas.mpl_disconnect(self.picker) 
+
+	def exclusive_on_lasso(self, verts):
+		p = Path(verts)
+		ind = p.contains_points(self.jumps[self.rat][:,0:2])
+		ind = map(not_, ind)
+		ind = np.where(ind)[0]
+		self.jumps[self.rat] = self.jumps[self.rat][ind,:]
+		self.signal_indices[self.rat] = self.signal_indices[self.rat][ind]
+		self.clusters[self.rat] = self.clusters[self.rat][ind]
+		self.setup_figures()
+
+	def inclusive_on_lasso(self, verts):
+		p = Path(verts)
+		ind = p.contains_points(self.jumps[self.rat][:,0:2])
+		ind = np.where(ind)[0]
+		self.jumps[self.rat] = self.jumps[self.rat][ind,:]
+		self.signal_indices[self.rat] = self.signal_indices[self.rat][ind]
+		self.clusters[self.rat] = self.clusters[self.rat][ind]
+		self.setup_figures()
+
 	def on_check(self, label):
 		cluster = REVERSE_LEGEND[label]
 		if cluster in self.included_clusters[self.rat]:
@@ -172,7 +228,9 @@ class PointBrowser:
 	
 	def cluster_data(self, event):
 		if event.key != "ctrl+" + 'C': return
-		self.clusters[self.rat], self.slopes[self.rat] = cluster_parameter.main(self.ji, self.rat, self.included_clusters[self.rat])
+		self.clusters[self.rat], self.slopes[self.rat] = cluster_parameter.main(
+			self.jumps[self.rat], self.signal_indices[self.rat], 
+			self.included_clusters[self.rat])
 		self.setup_figures()
 		for n, m in zip(self.included_clusters[self.rat], self.slopes[self.rat]):
 			label = LEGEND[n][0]
@@ -189,11 +247,11 @@ class PointBrowser:
 		
 		#increment jump index  
 		self.jump_index += inc
-		self.jump_index = int(np.clip(self.jump_index, 0, len(self.jumps)-1))
+		self.jump_index = int(np.clip(self.jump_index, 0, len(self.jumps[self.rat])-1))
 		
 		#draw yellow circle on graph
-		self.selected.set_data(self.jumps[self.jump_index,0], 
-			self.jumps[self.jump_index,1])
+		self.selected.set_data(self.jumps[self.rat][self.jump_index,0], 
+			self.jumps[self.rat][self.jump_index,1])
 		self.selected.set_visible(True)
 		self.fig_jumps.canvas.draw()
 
@@ -210,8 +268,8 @@ class PointBrowser:
 		#find closest jump point to selected location
 		x = event.mouseevent.xdata
 		y = event.mouseevent.ydata
-		distances = np.hypot(x-self.jumps[event.ind,0], 
-			y-self.jumps[event.ind,1])
+		distances = np.hypot(x-self.jumps[self.rat][event.ind,0], 
+			y-self.jumps[self.rat][event.ind,1])
 		m = distances.argmin()
 		self.jump_index = int(event.ind[m])	
 		if self.jump_index is None: 
@@ -219,8 +277,8 @@ class PointBrowser:
 			return
 
 		#draw yellow circle
-		self.selected.set_data(self.jumps[self.jump_index,0], 
-		 self.jumps[self.jump_index,1])
+		self.selected.set_data(self.jumps[self.rat][self.jump_index,0], 
+		 self.jumps[self.rat][self.jump_index,1])
 		self.selected.set_visible(True)
 		self.fig_jumps.canvas.draw()
 		
@@ -230,10 +288,10 @@ class PointBrowser:
 
 	def get_signal_data(self):
 		#self.signal_index = self.ji.get_signal_index(self.jump_index) 
-		signal_index = self.signal_indices[self.jump_index]
+		signal_index = self.signal_indices[self.rat][self.jump_index]
 		self.signal = self.ji.get_signal(signal_index) 
 		self.t, self.s = np.split(self.ji.get_curve(signal_index),[1],1)
-		self.jump = self.jumps[self.jump_index]
+		self.jump = self.jumps[self.rat][self.jump_index]
 		self.fs = self.ji.get_fs(signal_index)
 		print(self.jump)
 		
