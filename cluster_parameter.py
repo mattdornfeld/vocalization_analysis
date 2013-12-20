@@ -11,29 +11,29 @@ from math import atan, tan, sqrt
 from IPython import embed
 from functools import partial
 import brewer2mpl as brew
+from collections import OrderedDict
 
 
 def slope(n1, n2, r):
 	return float(n2-r) / (n1-r)
 
-NUM_CLUSTERS = 10
-SLOPES = {0: partial(slope,2,1), 1: partial(slope,3,2), 2: partial(slope,4,3), 3: partial(slope,5,4),
-4:partial(slope,6,5), 5: partial(slope,5,6), 6:partial(slope,4,5), 
-7:partial(slope,3,4), 8:partial(slope,2,3), 9: partial(slope,1,2)} 
+SLOPES = OrderedDict([(0, partial(slope,2,1)), (1, partial(slope,3,2)), (2, partial(slope,4,3)), (3, partial(slope,5,4)),
+(4,partial(slope,6,5)), (5, partial(slope,5,6)), (6,partial(slope,4,5)), 
+(7,partial(slope,3,4)), (8,partial(slope,2,3)), (9, partial(slope,1,2))])
 
 COLOR_MAP = (brew.get_map('Set3', 'qualitative', 10).mpl_colors +
 	brew.get_map('Accent', 'qualitative', 6).mpl_colors)
 
-LEGEND = {-1:("unclustered", COLOR_MAP[1]), 0:("2 to 1", COLOR_MAP[0]), 
-1:("3 to 2", COLOR_MAP[2]), 2:("4 to 3", COLOR_MAP[3]), 
-3:("5 to 4", COLOR_MAP[4]), 4:("6 to 5", COLOR_MAP[5]), 
-5:("5 to 6", COLOR_MAP[6]), 6:("4 to 5", COLOR_MAP[7]), 
-7:("3 to 4", COLOR_MAP[8]), 8:("2 to 3", COLOR_MAP[9]), 
-9:("1 to 2", COLOR_MAP[10])}
+LEGEND = OrderedDict([(-1,("unclustered", COLOR_MAP[1])), (0,("2 to 1", COLOR_MAP[0])), 
+(1,("3 to 2", COLOR_MAP[2])), (2,("4 to 3", COLOR_MAP[3])), 
+(3,("5 to 4", COLOR_MAP[4])), (4,("6 to 5", COLOR_MAP[5])), 
+(5,("5 to 6", COLOR_MAP[6])), (6,("4 to 5", COLOR_MAP[7])), 
+(7,("3 to 4", COLOR_MAP[8])), (8,("2 to 3", COLOR_MAP[9])), 
+(9,("1 to 2", COLOR_MAP[10]))])
 
-REVERSE_LEGEND = {"unclustered": -1, "2 to 1": 0, "3 to 2": 1, "4 to 3": 2, 
-"5 to 4": 3, "6 to 5": 4, "5 to 6": 5, "4 to 5": 6, "3 to 4": 7, "2 to 3": 8,
-"1 to 2": 9}
+REVERSE_LEGEND = OrderedDict([("unclustered", -1), ("2 to 1", 0), ("3 to 2", 1), ("4 to 3", 2), 
+("5 to 4", 3), ("6 to 5", 4), ("5 to 6", 5), ("4 to 5", 6), ("3 to 4", 7), ("2 to 3", 8),
+("1 to 2", 9)])
 
 NUM_CLUSTERS = len(LEGEND) - 1
 
@@ -74,7 +74,8 @@ def find_bisector(slopes):
 #takes slopes of lines, min, and max x values. returns vertices of quadrigon that lie on lines at min and max values. 
 def polygon_vertices(slopes, included_clusters, minf = 20e3, maxf = 85e3):
 	#vertices = [0 for x in range(len(slopes)+1)]
-	vertices = {n: [] for n in included_clusters}	
+	vertices = [(n,[]) for n in included_clusters]
+	vertices = OrderedDict(vertices)
 	
 	for i, m1 in enumerate(slopes):
 		c = included_clusters[i] 
@@ -159,9 +160,9 @@ def plot_jumps(jumps, cluster, slopes):
 		maxf = np.amax(jumps[idx,:][:,0])
 		f = np.arange(minf, maxf, 100)
 		line, = ax1.plot(jumps[idx,:][:,0],jumps[idx,:][:,1], 'o', 
-			markersize=2, color = plt.get_cmap('jet')((float(c)+1)/(num_clusters)))
+			markersize=2, color = LEGEND[c][1])
 		line, = ax1.plot(f, slopes[c]*f, 
-			color = plt.get_cmap('jet')((float(c)+1)/(num_clusters)), 
+			color = LEGEND[c][1], 
 			linewidth=1.3, label=LEGEND[c][0])
 	ax1.legend()
 
@@ -180,10 +181,11 @@ def plot_polygons(vertices, slopes):
 	
 	#embed()
 	for n,v in vertices.iteritems():
+		print(n)
 		ax_error.plot(v[:,0], v[:,1], 'ro')
 		poly = Path(v, codes, closed = True)
 		print(plt.get_cmap('jet')((float(n)+1)/(num_clusters-1)))
-		patch = patches.PathPatch(poly, facecolor = plt.get_cmap('jet')((float(n)+1)/(num_clusters)), lw=2)
+		patch = patches.PathPatch(poly, facecolor = LEGEND[n][1], lw=2)
 		ax_error.add_patch(patch)	
 
 def insert_jumps(ji, jumps, signal_indices, cluster):
@@ -201,7 +203,7 @@ def insert_jumps(ji, jumps, signal_indices, cluster):
 	ji.insert_jumps(jumps, signal_indices, cluster, quality)
 
 
-def main(jumps, signal_indices, included_clusters = range(NUM_CLUSTERS)):
+def main(jumps, included_clusters = range(NUM_CLUSTERS)):
 	#Organize input from db and command line
 	#dbPath = args.fileName
 	#rat = args.rat
@@ -216,7 +218,8 @@ def main(jumps, signal_indices, included_clusters = range(NUM_CLUSTERS)):
 	e = []
 	for r in rationals:
 		print(r)
-		slopes = {n: SLOPES[n](r) for n in included_clusters}
+		slopes = [(n,SLOPES[n](r)) for n in included_clusters]
+		slopes = OrderedDict(slopes)
 		bisecting_slopes= find_bisector(slopes)
 		vertices = polygon_vertices(bisecting_slopes, included_clusters)
 		cluster = poly_cluster(jumps[:,0:2], vertices)
@@ -227,23 +230,24 @@ def main(jumps, signal_indices, included_clusters = range(NUM_CLUSTERS)):
 	e = np.array(e)
 	r_min = rationals[np.where(e==min(e))][0]
 	print('r_min=' + str(r_min)) 
-	slopes = {n: SLOPES[n](r_min) for n in included_clusters}
+	slopes = [(n,SLOPES[n](r_min)) for n in included_clusters]
+	slopes = OrderedDict(slopes)
 	bisecting_slopes= find_bisector(slopes)
 	vertices = polygon_vertices(bisecting_slopes, included_clusters)
 	cluster = poly_cluster(jumps[:,0:2], vertices)
 	cluster = shuffle(jumps[:,0:2], cluster, slopes)
 
-	plot_jumps(jumps[:,0:2], cluster, slopes)
-	plot_polygons(vertices, slopes)
+	#plot_jumps(jumps[:,0:2], cluster, slopes)
+	#plot_polygons(vertices, slopes)
 	fig_error = plt.figure()
 	ax_error = fig_error.add_subplot(111)
 	ax_error.plot(rationals, e)
 	ax_error.set_xlabel('theta')
 	ax_error.set_ylabel('error')
 	ax_error.set_title("r = " + str(r_min))
-	#fig_error.show()
-	print(slopes)
-	plt.show()
+	fig_error.show()
+	#print(slopes)
+	#plt.show()
 
 
 	return cluster, slopes

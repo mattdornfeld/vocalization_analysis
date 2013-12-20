@@ -8,6 +8,7 @@ import libtfr as tfr
 from IPython import embed
 import brewer2mpl as brew
 from operator import not_
+from collections import OrderedDict
 
 
 """
@@ -18,16 +19,21 @@ can click on them to display the reassinged spectrogram in another window.
 COLOR_MAP = (brew.get_map('Set3', 'qualitative', 10).mpl_colors +
 	brew.get_map('Set2', 'qualitative', 6).mpl_colors)
 
-LEGEND = {-1:("unclustered", COLOR_MAP[1]), 0:("2 to 1", COLOR_MAP[0]), 
-1:("3 to 2", COLOR_MAP[2]), 2:("4 to 3", COLOR_MAP[3]), 
-3:("5 to 4", COLOR_MAP[4]), 4:("6 to 5", COLOR_MAP[5]), 
-5:("5 to 6", COLOR_MAP[6]), 6:("4 to 5", COLOR_MAP[7]), 
-7:("3 to 4", COLOR_MAP[8]), 8:("2 to 3", COLOR_MAP[9]), 
-9:("1 to 2", COLOR_MAP[10])}
+LEGEND = OrderedDict([(-1,("unclustered", COLOR_MAP[1])), (0,("2 to 1", COLOR_MAP[0])), 
+(1,("3 to 2", COLOR_MAP[2])), (2,("4 to 3", COLOR_MAP[3])), 
+(3,("5 to 4", COLOR_MAP[4])), (4,("6 to 5", COLOR_MAP[5])), 
+(5,("5 to 6", COLOR_MAP[6])), (6,("4 to 5", COLOR_MAP[7])), 
+(7,("3 to 4", COLOR_MAP[8])), (8,("2 to 3", COLOR_MAP[9])), 
+(9,("1 to 2", COLOR_MAP[10]))])
 
-REVERSE_LEGEND = {"unclustered": -1, "2 to 1": 0, "3 to 2": 1, "4 to 3": 2, 
-"5 to 4": 3, "6 to 5": 4, "5 to 6": 5, "4 to 5": 6, "3 to 4": 7, "2 to 3": 8,
-"1 to 2": 9}
+REVERSE_LEGEND = OrderedDict([("unclustered", -1), ("2 to 1", 0), ("3 to 2", 1), ("4 to 3", 2), 
+("5 to 4", 3), ("6 to 5", 4), ("5 to 6", 5), ("4 to 5", 6), ("3 to 4", 7), ("2 to 3", 8),
+("1 to 2", 9)])
+
+CLUSTERS = OrderedDict([(0, {'n1':2, 'n2':1}), (1, {'n1':3, 'n2':2}), 
+	(2, {'n1':4, 'n2':3}), (3, {'n1':5, 'n2':4}), (4, {'n1':6, 'n2':5}), 
+	(5, {'n1':5, 'n2':6}), (6, {'n1':4, 'n2':5}), (7, {'n1':3, 'n2':4}), 
+	(8, {'n1':2, 'n2':3}), (9, {'n1':1, 'n2':2})])
 
 NUM_CLUSTERS = len(LEGEND) - 1
 
@@ -38,11 +44,11 @@ class PointBrowser:
 		if rat not in self.rats:
 			raise Exception("That rat doesn't exist.")
 
-		self.clusters = dict()
-		self.included_clusters = dict()
-		self.jumps = dict()
-		self.signal_indices = dict()
-		self.slopes = dict()
+		self.clusters = OrderedDict()
+		self.included_clusters = OrderedDict()
+		self.jumps = OrderedDict()
+		self.signal_indices = OrderedDict()
+		self.slopes = OrderedDict()
 		for r in self.rats:
 			l = len(ji.get_jumps(r))
 			self.clusters[r] = -1 * np.ones(l)
@@ -85,6 +91,7 @@ class PointBrowser:
 			self.fig_jumps = plt.figure()
 			self.fig_mgram = plt.figure()
 			self.fig_hist = plt.figure()
+			self.fig_hist_phi = plt.figure()
 			
 			#Connect click and press events to callback functions
 			self.fig_jumps.canvas.mpl_connect('key_press_event', self.reload_defaults)
@@ -98,6 +105,7 @@ class PointBrowser:
 			self.ax_jumps = self.fig_jumps.add_subplot(111, aspect='equal')
 			self.ax_mgram = self.fig_mgram.add_subplot(111)
 			self.ax_hist = self.fig_hist.add_subplot(111)
+			self.ax_hist_phi = self.fig_hist_phi.add_subplot(111)
 
 			#create cluster checker
 			rect = [0.00, 0.7, 0.1, 0.25] #l,b,w,h
@@ -162,6 +170,21 @@ class PointBrowser:
 		center = (bins[:-1] + bins[1:]) / 2
 		self.ax_hist.bar(center, hist, align='center', width=width)
 
+		"""
+		for c in self.included_clusters[self.rat]:
+			n1 = CLUSTERS[c]['n1']
+			n2 = CLUSTERS[c]['n2']
+			idx = np.where(clutsers)
+			phi = ((n1*self.jumps[self.rat][:,1] - n2*self.jumps[self.rat][:,0]) 
+				/ (self.jumps[self.rat][:,1]-self.jumps[self.rat][:,0]))
+			hist, bins = np.histogram(phi, bins=50)
+			width = 0.7 * (bins[1] - bins[0])
+			center = (bins[:-1] + bins[1:]) / 2
+			self.ax_hist_phi.bar(center, hist, align='center', width=width)
+		"""
+
+
+
 		#create legend self.ax_jumps.legend()
 		handles, labels = self.ax_jumps.get_legend_handles_labels()
 		rect = [0.1, 0.8, 0.1, 0.15] #l,b,w,h
@@ -224,13 +247,15 @@ class PointBrowser:
 		else:
 			self.included_clusters[self.rat].insert(cluster, cluster)
 
+		self.included_clusters[self.rat].sort()	
+		print(self.included_clusters[self.rat])
+
 		self.fig_jumps.canvas.draw()
 	
 	def cluster_data(self, event):
 		if event.key != "ctrl+" + 'C': return
 		self.clusters[self.rat], self.slopes[self.rat] = cluster_parameter.main(
-			self.jumps[self.rat], self.signal_indices[self.rat], 
-			self.included_clusters[self.rat])
+			self.jumps[self.rat], self.included_clusters[self.rat])
 		self.setup_figures()
 		for n, m in zip(self.included_clusters[self.rat], self.slopes[self.rat]):
 			label = LEGEND[n][0]
@@ -344,6 +369,26 @@ class PointBrowser:
 		self.ax_mgram.plot(self.jump[3]*self.fs/tstep, self.jump[1]/yconv,'mo')
 
 		self.fig_mgram.canvas.draw()
+
+
+#sort jumps first based on cluster then based on distance from the origin	
+def sort_jumps(jumps, signal_indices, cluster):
+	sorted_jumps = np.zeros(jumps.shape)
+	sorted_signal_indices = np.zeros(len(signal_indices))
+	distance = np.sqrt(jumps[:,0]**2+jumps[:,1]**2)
+	idx = cluster.argsort() 
+	cluster = cluster[idx] #cluster is now sorted
+	jumps = jumps[idx,:]
+	distance = distance[idx]
+	signal_indices = signal_indices[idx]  
+	for c in np.unique(cluster):
+		idx1 = find(cluster == c)
+		j = jumps[idx1,:]
+		idx2 = distance[idx1].argsort()
+		sorted_jumps[idx1,:] = jumps[idx1,:][idx2,:]
+		sorted_signal_indices[idx1] = signal_indices[idx1][idx2]
+	
+	return sorted_jumps, sorted_signal_indices, cluster
 
 if __name__ == '__main__':
 	dbPath = '/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db'
