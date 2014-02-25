@@ -13,7 +13,6 @@ from functools import partial
 import brewer2mpl as brew
 from collections import OrderedDict
 
-
 def slope(n1, n2, r):
 	return float(n2-r) / (n1-r)
 
@@ -266,7 +265,7 @@ if __name__ == "__main__":
 	dbPath = '/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db'
 	ji = jump_interface.JumpInterface(dbPath)
 	#args = parser.parse_args()
-	rat = 'V2'
+	#rat = 'V2'
 	jumps = ji.get_jumps(rat)
 	signal_indices = ji.jget_signal_indices(rat)
 	included_clusters = [1, 3, 6, 8] 

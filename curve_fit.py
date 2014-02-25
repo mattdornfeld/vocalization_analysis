@@ -7,7 +7,6 @@ from matplotlib.mlab import find
 import matplotlib.pyplot as plt
 from scipy.ndimage.measurements import label
 from scipy.stats import linregress
-from customtools import arrayStack
 import jump_interface
 from IPython import embed
 

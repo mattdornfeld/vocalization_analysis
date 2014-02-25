@@ -24,16 +24,25 @@ class JumpInterface:
 	def get_rats(self):
 		with self.con:
 			cur = self.con.cursor()
-			cur.execute("SELECT rat FROM signals")
+			cur.execute("SELECT rat FROM jumps")
 			rats = np.array(cur.fetchall()).flatten()
 			
 			return np.unique(rats)
 
+	def get_fs(self, signal_index):
+		with self.con:
+			cur = self.con.cursor()
+			cur.execute("SELECT Fs FROM signals WHERE signal_index=?", 
+				(signal_index,))
+
+			return cur.fetchone()[0]
+
+
 	def get_jump(self, jump_index):
 		with self.con:
 			cur = self.con.cursor()
-			cur.execute("SELECT f1, f2, t1, t2 FROM jumps WHERE \
-				jump_index=?", (jump_index,))
+			cur.execute("SELECT f1, f2, t1, t2 FROM jumps WHERE jump_index=?", 
+				(jump_index,))
 			jump = np.array(cur.fetchone()).flatten()
 			
 			return jump

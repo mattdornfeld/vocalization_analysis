@@ -326,17 +326,17 @@ class PointBrowser:
 		#define constants
 		nf = 512
 		tstep = 30
-		yskip = 20
 		tskip = 100
 		nf2=nf/2+1 #number of display points
 		yconv=int(self.fs/(2*nf2))
+		yskip = 10e3/yconv
 
 		#calculate mgram
 		mgram = tfr.tfr_spec(self.signal, nf, tstep, nf)
 		mgram[mgram==0] = np.amin(mgram[mgram>0])
 
 		#setup labels
-		self.ax_mgram.set_title('Reassinged Spectrogram With Curve Fit')
+		#self.ax_mgram.set_title('Reassinged Spectrogram With Curve Fit')
 		self.ax_mgram.set_xlabel('Time (s)')
 		self.ax_mgram.set_ylabel('Frequency (Hz)')
 
@@ -349,8 +349,10 @@ class PointBrowser:
 		self.ax_mgram.set_xticklabels(t_data_coords)
 
 		#setup frequency axis coordintes
-		f_axis_coords = np.arange(0, nf2, yskip)
+		f_axis_coords = np.arange(0, nf2, int(yskip))
+		print(f_axis_coords)
 		f_data_coords = np.arange(0, self.fs/2, yskip*yconv)
+		print(f_data_coords)
 		self.ax_mgram.set_yticks(f_axis_coords)
 		self.ax_mgram.set_yticklabels(f_data_coords)
 
@@ -366,7 +368,18 @@ class PointBrowser:
 			label='Fitted Curve')
 		self.ax_mgram.plot(self.jump[2]*self.fs/tstep, self.jump[0]/yconv, 
 			'mo', label='Jump Points')
-		self.ax_mgram.plot(self.jump[3]*self.fs/tstep, self.jump[1]/yconv,'mo')
+		self.ax_mgram.plot(self.jump[3]*self.fs/tstep, self.jump[1]/yconv,'ro')
+
+		"""
+		handles, labels = self.ax_mgram.get_legend_handles_labels()
+		rect = [0.1, 0.8, 0.1, 0.15] #l,b,w,h
+		self.ax_mgram_legend = self.fig_mgram.add_axes(rect)
+		self.ax_mgram_legend.get_xaxis().set_visible(False)
+		self.ax_mgram_legend.get_yaxis().set_visible(False)
+		self.ax_mgram_legend.set_axis_bgcolor((0.75, 0.75, 0.75, 1.0))
+		self.ax_mgram_legend.set_frame_on(False)
+		self.ax_mgram_legend.legend(handles, labels, markerscale=3)
+		"""
 
 		self.fig_mgram.canvas.draw()
 
