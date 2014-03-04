@@ -23,11 +23,11 @@ SLOPES = OrderedDict([(0, partial(slope,2,1)), (1, partial(slope,3,2)), (2, part
 COLOR_MAP = (brew.get_map('Set3', 'qualitative', 10).mpl_colors +
 	brew.get_map('Accent', 'qualitative', 6).mpl_colors)
 
-LEGEND = OrderedDict([(-1,("unclustered", COLOR_MAP[1])), (0,("2 to 1", COLOR_MAP[0])), 
-(1,("3 to 2", COLOR_MAP[2])), (2,("4 to 3", COLOR_MAP[3])), 
+LEGEND = OrderedDict([(-1,("unclustered", COLOR_MAP[2])), (0,("2 to 1", COLOR_MAP[0])), 
+(1,("3 to 2", COLOR_MAP[15])), (2,("4 to 3", COLOR_MAP[3])), 
 (3,("5 to 4", COLOR_MAP[4])), (4,("6 to 5", COLOR_MAP[5])), 
 (5,("5 to 6", COLOR_MAP[6])), (6,("4 to 5", COLOR_MAP[7])), 
-(7,("3 to 4", COLOR_MAP[8])), (8,("2 to 3", COLOR_MAP[9])), 
+(7,("3 to 4", COLOR_MAP[8])), (8,("2 to 3", (131./255,39./255,39./255))), 
 (9,("1 to 2", COLOR_MAP[10]))])
 
 REVERSE_LEGEND = OrderedDict([("unclustered", -1), ("2 to 1", 0), ("3 to 2", 1), ("4 to 3", 2), 
@@ -46,7 +46,7 @@ def regression(x,y):
 	return float(m)
 
 #Error of all the clusters. We're trying to minimize this.
-def costFunction(jumps, cluster, slopes):
+def cost_function(jumps, cluster, slopes):
 	cost = 0 
 	for c in slopes.keys(): 
 		idx = find(cluster==c)
@@ -142,28 +142,43 @@ def shuffle(jumps, cluster, slopes):
 		
 def plot_jumps(jumps, cluster, slopes):
 	num_clusters = len(slopes)
-	fig1 = plt.figure()
+	fig1 = plt.figure(figsize=(12, 12), dpi=100)
+
 	ax1 = fig1.add_subplot(111, aspect='equal')
-	ax1.set_title('After Jump Frequency Vs Before Jump Frequency')
-	ax1.set_xlabel('F1')
-	ax1.set_ylabel('F2')
+	#ax1.set_title('After Jump Frequency Vs Before Jump Frequency')
+	ax1.set_xlabel('f1', size=12)
+	ax1.set_ylabel('f2', size=12)
 	#transitions = [str(n+1)+' to ' +str(n) for n in range(2,6)]
 	#transitions = transitions+[str(n)+' to ' +str(n+1) for n in range(5,1,-1)]
 
-
+	f = np.arange(20e3, 80e3, 100)
 	for c in slopes.keys():
 		#plot the data set a second time and color code them by cluster
 		idx = find(cluster==c)
 		if len(idx)==0: continue
 		minf = np.amin(jumps[idx,:][:,0])
 		maxf = np.amax(jumps[idx,:][:,0])
-		f = np.arange(minf, maxf, 100)
 		line, = ax1.plot(jumps[idx,:][:,0],jumps[idx,:][:,1], 'o', 
-			markersize=2, color = LEGEND[c][1])
-		line, = ax1.plot(f, slopes[c]*f, 
-			color = LEGEND[c][1], 
-			linewidth=1.3, label=LEGEND[c][0])
-	ax1.legend()
+			markersize=2.3, color = LEGEND[c][1], label=LEGEND[c][0])
+		line, = ax1.plot(f, slopes[c]*f, color = LEGEND[c][1])
+
+	#create legend ax_jumps.legend()
+	handles, labels = ax1.get_legend_handles_labels()
+	rect = [0.73, 0.758, 0.1, 0.15] #l,b,w,h
+	ax_legend = fig1.add_axes(rect)
+	ax_legend.get_xaxis().set_visible(False)
+	ax_legend.get_yaxis().set_visible(False)
+	ax_legend.set_axis_bgcolor((0.75, 0.75, 0.75, 1.0))
+	ax_legend.set_frame_on(False)
+	ax_legend.legend(handles[::-1], labels[::-1],
+	 markerscale=3, numpoints=1)
+
+	#set axis limits
+
+	ax1.set_xlim(f[0], f[-1])
+	ax1.set_ylim(f[0], f[-1])
+	plt.show()
+	#fig1.savefig(rat+'.png', bbox_inches='tight', pad_inches=0)
 
 def plot_polygons(vertices, slopes):
 	fig_error = plt.figure()
@@ -175,8 +190,8 @@ def plot_polygons(vertices, slopes):
 	num_clusters=len(vertices)
 	codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY]
 	
-	#for m in slopes:
-	#	ax_error.plot(x, m*x)
+	for m in slopes:
+		ax_error.plot(x, m*x)
 	
 	#embed()
 	for n,v in vertices.iteritems():
@@ -223,7 +238,7 @@ def main(jumps, included_clusters = range(NUM_CLUSTERS)):
 		vertices = polygon_vertices(bisecting_slopes, included_clusters)
 		cluster = poly_cluster(jumps[:,0:2], vertices)
 		cluster = shuffle(jumps[:,0:2], cluster, slopes)
-		e.append(costFunction(jumps[:,0:2], cluster, slopes))
+		e.append(cost_function(jumps[:,0:2], cluster, slopes))
 	
 	#take r with min eror
 	e = np.array(e)
@@ -236,8 +251,10 @@ def main(jumps, included_clusters = range(NUM_CLUSTERS)):
 	cluster = poly_cluster(jumps[:,0:2], vertices)
 	cluster = shuffle(jumps[:,0:2], cluster, slopes)
 
-	#plot_jumps(jumps[:,0:2], cluster, slopes)
+	plot_jumps(jumps[:,0:2], cluster, slopes)
+	
 	#plot_polygons(vertices, slopes)
+	
 	fig_error = plt.figure()
 	ax_error = fig_error.add_subplot(111)
 	ax_error.plot(rationals, e)
@@ -245,9 +262,8 @@ def main(jumps, included_clusters = range(NUM_CLUSTERS)):
 	ax_error.set_ylabel('error')
 	ax_error.set_title("r = " + str(r_min))
 	fig_error.show()
+	
 	#print(slopes)
-	#plt.show()
-
 
 	return cluster, slopes
 	"""
@@ -265,9 +281,13 @@ if __name__ == "__main__":
 	dbPath = '/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db'
 	ji = jump_interface.JumpInterface(dbPath)
 	#args = parser.parse_args()
-	#rat = 'V2'
-	jumps = ji.get_jumps(rat)
-	signal_indices = ji.jget_signal_indices(rat)
-	included_clusters = [1, 3, 6, 8] 
-	main(jumps, signal_indices, included_clusters)
+	"""
+	rat_clusters={'V1':[3,6], 'V2':[3,6], 'V3':[3,6], 'V4':[1,2,3,4,5,6,7,8],
+		'V5':[3,6], 'V6':[1,2,3,4,5,6,7,8], 'V15':[1,3,6,8], 'V17':[3,6], 
+		'V18':[3,6], 'V31':[1,3,6,8], 'V32': [3,6]}
+	"""
+	rat_clusters={'V6':[1,2,3,4,5,6,7,8]}
+	for rat, included_clusters in rat_clusters.iteritems():
+		jumps = ji.get_jumps(rat)
+		main(jumps, included_clusters)
 

@@ -19,11 +19,11 @@ can click on them to display the reassinged spectrogram in another window.
 COLOR_MAP = (brew.get_map('Set3', 'qualitative', 10).mpl_colors +
 	brew.get_map('Set2', 'qualitative', 6).mpl_colors)
 
-LEGEND = OrderedDict([(-1,("unclustered", COLOR_MAP[1])), (0,("2 to 1", COLOR_MAP[0])), 
-(1,("3 to 2", COLOR_MAP[2])), (2,("4 to 3", COLOR_MAP[3])), 
+LEGEND = OrderedDict([(-1,("unclustered", COLOR_MAP[2])), (0,("2 to 1", COLOR_MAP[0])), 
+(1,("3 to 2", COLOR_MAP[15])), (2,("4 to 3", COLOR_MAP[3])), 
 (3,("5 to 4", COLOR_MAP[4])), (4,("6 to 5", COLOR_MAP[5])), 
 (5,("5 to 6", COLOR_MAP[6])), (6,("4 to 5", COLOR_MAP[7])), 
-(7,("3 to 4", COLOR_MAP[8])), (8,("2 to 3", COLOR_MAP[9])), 
+(7,("3 to 4", COLOR_MAP[8])), (8,("2 to 3", (131./255,39./255,39./255))), 
 (9,("1 to 2", COLOR_MAP[10]))])
 
 REVERSE_LEGEND = OrderedDict([("unclustered", -1), ("2 to 1", 0), ("3 to 2", 1), ("4 to 3", 2), 
@@ -88,18 +88,25 @@ class PointBrowser:
 		print(self.rat)
 		if 'fig_jumps' not in self.__dict__.keys():
 			#create figures
+			self.fig_controls = plt.figure()
 			self.fig_jumps = plt.figure()
 			self.fig_mgram = plt.figure()
 			self.fig_hist = plt.figure()
 			self.fig_hist_phi = plt.figure()
 			
 			#Connect click and press events to callback functions
-			self.fig_jumps.canvas.mpl_connect('key_press_event', self.reload_defaults)
-			self.fig_jumps.canvas.mpl_connect('key_press_event', self.on_press)
-			self.fig_jumps.canvas.mpl_connect('key_press_event', self.change_rat)
-			self.fig_jumps.canvas.mpl_connect('key_press_event', self.cluster_data)
-			self.fig_mgram.canvas.mpl_connect('key_press_event', self.on_press)
-			self.picker = self.fig_jumps.canvas.mpl_connect('pick_event', self.on_pick)
+			self.fig_jumps.canvas.mpl_connect('key_press_event', 
+				self.reload_defaults)
+			self.fig_jumps.canvas.mpl_connect('key_press_event',
+			 self.on_press)
+			self.fig_jumps.canvas.mpl_connect('key_press_event', 
+				self.change_rat)
+			self.fig_jumps.canvas.mpl_connect('key_press_event', 
+				self.cluster_data)
+			self.fig_mgram.canvas.mpl_connect('key_press_event', 
+				self.on_press)
+			self.picker = self.fig_jumps.canvas.mpl_connect('pick_event', 
+				self.on_pick)
 			
 			#create axes
 			self.ax_jumps = self.fig_jumps.add_subplot(111, aspect='equal')
@@ -109,11 +116,11 @@ class PointBrowser:
 
 			#create cluster checker
 			rect = [0.00, 0.7, 0.1, 0.25] #l,b,w,h
-			self.ax_checker = self.fig_jumps.add_axes(rect)
+			self.ax_checker = self.fig_controls.add_axes(rect)
 
 			#create lasso/point selector toggles
 			rect = [0.00, 0.4, 0.1, 0.25] #l,b,w,h
-			self.ax_toggle = self.fig_jumps.add_axes(rect)
+			self.ax_toggle = self.fig_controls.add_axes(rect)
 			labels = ["Point Selector", "Exclusive Lasso", "Inclusive Lasso"]
 			self.toggle = RadioButtons(self.ax_toggle, labels, 0)
 			self.toggle.on_clicked(self.selection_mode)
@@ -135,9 +142,9 @@ class PointBrowser:
 		#set axes properties
 		title = (str(self.rat) + " After Jump Frequency Vs Before Jump"  
 			" Frequency")
-		self.ax_jumps.set_title(title)
-		self.ax_jumps.set_xlabel('F1')
-		self.ax_jumps.set_ylabel('F2')
+		#self.ax_jumps.set_title(title)
+		self.ax_jumps.set_xlabel('f1')
+		self.ax_jumps.set_ylabel('f2')
 
 		#plot jumps invisibly for click selector
 		line,=self.ax_jumps.plot(self.jumps[self.rat][:,0], 
@@ -147,11 +154,13 @@ class PointBrowser:
 		f = np.arange(20e3, 80e3, 100)
 		
 		#plot unclustered jumps first
+		
 		n = -1
 		idx = np.where(self.clusters[self.rat]==n)[0]
 		line, = self.ax_jumps.plot(self.jumps[self.rat][idx][:,0], 
 				self.jumps[self.rat][idx][:,1],'o',markersize=2.3, 
 				color = LEGEND[n][1], label = LEGEND[n][0])
+		
 		#plot clustered jumps
 		for c in self.included_clusters[self.rat]:
 			idx = np.where(self.clusters[self.rat]==c)[0]
@@ -165,7 +174,8 @@ class PointBrowser:
 					color = LEGEND[c][1])
 
 		#plot histogram
-		hist, bins = np.histogram(self.jumps[self.rat][:,1]/self.jumps[self.rat][:,0], bins=50)
+		hist, bins = np.histogram(
+			self.jumps[self.rat][:,1]/self.jumps[self.rat][:,0], bins=50)
 		width = 0.7 * (bins[1] - bins[0])
 		center = (bins[:-1] + bins[1:]) / 2
 		self.ax_hist.bar(center, hist, align='center', width=width)
@@ -184,16 +194,19 @@ class PointBrowser:
 		"""
 
 
-
+		
 		#create legend self.ax_jumps.legend()
 		handles, labels = self.ax_jumps.get_legend_handles_labels()
-		rect = [0.1, 0.8, 0.1, 0.15] #l,b,w,h
+		rect = [0.73, 0.758, 0.1, 0.15] #l,b,w,h
 		self.ax_legend = self.fig_jumps.add_axes(rect)
 		self.ax_legend.get_xaxis().set_visible(False)
 		self.ax_legend.get_yaxis().set_visible(False)
 		self.ax_legend.set_axis_bgcolor((0.75, 0.75, 0.75, 1.0))
 		self.ax_legend.set_frame_on(False)
-		self.ax_legend.legend(handles, labels, markerscale=3)
+		self.ax_legend.legend(handles[::-1], labels[::-1],
+		 markerscale=3, numpoints=1)
+		
+		
 
 		#plot red dot
 		self.selected,= self.ax_jumps.plot([self.jumps[self.rat][0,0]], 
