@@ -1,4 +1,3 @@
-import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.mlab import find
@@ -12,13 +11,23 @@ from IPython import embed
 from functools import partial
 import brewer2mpl as brew
 from collections import OrderedDict
+from scipy.optimize import fmin_ncg
 
-def slope(n1, n2, r):
-	return float(n2-r) / (n1-r)
+def slope(n1, n2, theta):
+	return float(n2-theta) / (n1-theta)
 
-SLOPES = OrderedDict([(0, partial(slope,2,1)), (1, partial(slope,3,2)), (2, partial(slope,4,3)), (3, partial(slope,5,4)),
-(4,partial(slope,6,5)), (5, partial(slope,5,6)), (6,partial(slope,4,5)), 
-(7,partial(slope,3,4)), (8,partial(slope,2,3)), (9, partial(slope,1,2))])
+def dslope(n1, n2, theta):
+	return float(n1-n2) / (n1 - theta)**2
+
+SLOPES = OrderedDict([(0, partial(slope,2,1)), (1, partial(slope,3,2)), 
+	(2, partial(slope,4,3)), (3, partial(slope,5,4)), (4,partial(slope,6,5)), 
+	(5, partial(slope,5,6)), (6,partial(slope,4,5)), (7,partial(slope,3,4)), 
+	(8,partial(slope,2,3)), (9, partial(slope,1,2))])
+
+DSLOPES = OrderedDict([(0, partial(dslope,2,1)), (1, partial(dslope,3,2)), 
+	(2, partial(dslope,4,3)), (3, partial(dslope,5,4)), (4,partial(dslope,6,5)), 
+	(5, partial(dslope,5,6)), (6,partial(dslope,4,5)), (7,partial(dslope,3,4)), 
+	(8,partial(dslope,2,3)), (9, partial(dslope,1,2))])
 
 COLOR_MAP = (brew.get_map('Set3', 'qualitative', 10).mpl_colors +
 	brew.get_map('Accent', 'qualitative', 6).mpl_colors)
@@ -36,26 +45,68 @@ REVERSE_LEGEND = OrderedDict([("unclustered", -1), ("2 to 1", 0), ("3 to 2", 1),
 
 NUM_CLUSTERS = len(LEGEND) - 1
 
-#linear regression forced through origin
-def regression(x,y):
-	x = np.mat(x)
-	y = np.mat(y)
-	x.shape=(1,x.size)
-	y.shape=(1,y.size)
-	m= y * x.T * np.linalg.inv(x*x.T)
-	return float(m)
-
 #Error of all the clusters. We're trying to minimize this.
-def cost_function(jumps, cluster, slopes):
-	cost = 0 
-	for c in slopes.keys(): 
+def dcost(x, *args):
+	theta = x[0]
+	b = x[1]
+	included_clusters = args[0]
+	jumps = args[1]
+
+	h = [(n, SLOPES[n](theta)) for n in included_clusters]
+	h = OrderedDict(h)
+	dh = [(n, DSLOPES[n](theta)) for n in included_clusters]
+	dh = OrderedDict(dh)
+	bisecting_slopes= find_bisector(h)
+	vertices = polygon_vertices(bisecting_slopes, included_clusters)
+	cluster = poly_cluster(jumps[:,0:2], vertices)
+
+	dcost_theta = 0
+	dcost_b = 0
+	for c in h.keys(): 
 		idx = find(cluster==c)
 		l = len(jumps[idx,0:2])
 		for j in jumps[idx,0:2]:
-			x = (j[0] / slopes[c] + j[1]) / (slopes[c] + 1 / slopes[c])
-			y = slopes[c] * x
+			x = (j[0] / h[c] + j[1] - b) / (h[c] + 1 / h[c])
+			y = h[c] * x + b 
+			dx_theta = ((h[c]**2 + 1) * (j[1] - b) * dh[c] - 
+				2 * (j[0] + (j[1] - b) * h[c]) * h[c] * dh[c]) / (h[c]**2 + 1)**2
+			dy_theta = ((h[c]**2 + 1) * (j[0] * dh[c] + 2 * (j[1] - b) * h[c] * dh[c]) 
+				- 2 * (j[0] * h[c] + (j[1] - b) * h[c]**2) * h[c] * dh[c]) / (h[c]**2 + 1)**2
+			dx_b = -h[c] / (h[c]**2 + 1)
+			dy_b = -h[c]**2 / (h[c]**2 + 1)
+
+			dcost_theta += (2 * (j[0] - x) * dx_theta 
+				+ 2 * ((j[1] - b) - y) * dy_theta) / l
+
+			dcost_b += (2 * (j[0] - x) * dx_b 
+				+ 2 * ((j[1] - b) - y) * dy_b) / l
+
+	return np.array([dcost_theta, dcost_b])
+
+def cost(x, *args):
+	theta = x[0]
+	b = x[1]
+	included_clusters = args[0]
+	jumps = args[1]
+
+	h = [(n,SLOPES[n](theta)) for n in included_clusters]
+	h = OrderedDict(h)
+	bisecting_slopes = find_bisector(h)
+	vertices = polygon_vertices(bisecting_slopes, included_clusters)
+	cluster = poly_cluster(jumps[:,0:2], vertices)
+	cost = 0 
+	for c in h.keys(): 
+		idx = find(cluster==c)
+		l = len(jumps[idx,0:2])
+		print(l)
+		for j in jumps[idx,0:2]:
+			x = (j[0] / h[c] + j[1] - b) / (h[c] + 1 / h[c])
+			y = h[c] * x + b 
 			cost += (((j[0] - x)**2 + (j[1]-y)**2)) / l 
 	
+	#print('b='+str(b))
+	#print('theta='+str(theta))
+	#print('cost='+str(cost))
 	return cost
 
 #takes an array of slopes and returns the slopes of the bisectors of these lines sorted along with the original slopes	
@@ -106,40 +157,58 @@ def poly_cluster(jumps, vertices, codes =
 	
 	return cluster
 
-#shuffle the points around between neighboring clusters to minimize error
-def shuffle(jumps, cluster, slopes):
-	num_clusters = len(slopes)
-	keys = slopes.keys()
-	for ij, j in enumerate(jumps):
-		#embed()
-		c = int(cluster[ij])
-		if c==-1: continue
-		idx = keys.index(c) 
-		e1 = j[1]-slopes[c]*j[0] #original error
-		#handle edge cases first 
-		if (c==keys[0] and e1<0) or (c==keys[-1] and e1>0): continue
-		elif c==keys[0] and e1>0:
-			nc = keys[idx+1] #next cluster
-			e2 = j[1]-slopes[nc]*j[0]
-			if abs(e2)<abs(e1): cluster[ij]=c+1
-		elif c==keys[-1] and e1<0:
-			pc = keys[idx-1] #prev cluster
-			e2 = j[1]-slopes[pc]*j[0]
-			if abs(e2)<abs(e1): cluster[ij]=c-1
-		else:
-			#if above the line and new error is less than original bring it up one cluster
-			#if below the line bring it down one
-			if e1>0:
-				nc = keys[idx+1] #next cluster
-				e2 = j[1]-slopes[nc]*j[0]
-				if abs(e2)<abs(e1): cluster[ij]=c+1
-			if e1<0:
-				pc = keys[idx-1] #prev cluster
-				e2 = j[1]-slopes[pc]*j[0]
-				if abs(e2)<abs(e1): cluster[ij]=c-1
+def main(jumps, included_clusters = range(NUM_CLUSTERS)):
+	#Organize input from db and command line
+	#dbPath = args.fileName
+	#rat = args.rat
+	#jumps = ji.get_jumps(rat)
+	#signal_indices = ji.jget_signal_indices(rat)
+	#jump_indices = ji.get_jump_indices(rat)
 	
-	return cluster
-		
+	#Brute force through different values of theta(theta)
+	#Find error of each on
+	"""
+	fig, ax = plt.subplots()
+	ax.plot(jumps[:,0], jumps[:,1], 'o')
+	plt.show()
+	"""
+	theta_min, b_min  = fmin_ncg(f=cost, x0=[0,0], fprime=dcost,
+	 args=(included_clusters,jumps), avextol=1e-5)
+	#take theta with min eror
+	#print('r_min=' + str(r_min))
+	""" 
+	slopes = [(n,SLOPES[n](r_min)) for n in included_clusters]
+	slopes = OrderedDict(slopes)
+	bisecting_slopes= find_bisector(slopes)
+	vertices = polygon_vertices(bisecting_slopes, included_clusters)
+	cluster = poly_cluster(jumps[:,0:2], vertices)
+	cluster = shuffle(jumps[:,0:2], cluster, slopes)
+	"""
+
+	#plot_jumps(jumps[:,0:2], cluster, slopes)
+	
+	#plot_polygons(vertices, slopes)
+	
+	"""
+	fig_error = plt.figure()
+	ax_error = fig_error.add_subplot(111)
+	ax_error.plot(rationals, e)
+	ax_error.set_xlabel('theta')
+	ax_error.set_ylabel('error')
+	ax_error.set_title("theta = " + str(r_min))
+	fig_error.show()
+	"""
+	
+	#print(slopes)
+
+	return theta_min, b_min
+	"""
+	for jump_index in jump_indices:
+		ji.update_cluster(jump_index, cluster)
+	#point_browser.PointBrowser(ji)
+	"""
+	
+
 def plot_jumps(jumps, cluster, slopes):
 	num_clusters = len(slopes)
 	fig1 = plt.figure(figsize=(12, 12), dpi=100)
@@ -202,82 +271,11 @@ def plot_polygons(vertices, slopes):
 		patch = patches.PathPatch(poly, facecolor = LEGEND[n][1], lw=2)
 		ax_error.add_patch(patch)	
 
-def insert_jumps(ji, jumps, signal_indices, cluster):
-	#put the bad jumps on top
-	q1 = np.ones((len(jumps)))
-	q0 = ji.get_jump_indices_quality(0)
-	bad_jumps = ji.get_jumps()[q0]
-	bad_signal_indices = ji.get_signal_indices()[q0]
-	bad_cluster = -1 * np.ones(len(bad_jumps))
-	jumps = np.vstack((jumps, bad_jumps))
-	#embed()
-	signal_indices = np.concatenate((signal_indices, bad_signal_indices))
-	cluster = np.concatenate((cluster, bad_cluster))
-	quality = np.concatenate((q1,q0))
-	ji.insert_jumps(jumps, signal_indices, cluster, quality)
-
-
-def main(jumps, included_clusters = range(NUM_CLUSTERS)):
-	#Organize input from db and command line
-	#dbPath = args.fileName
-	#rat = args.rat
-	#jumps = ji.get_jumps(rat)
-	#signal_indices = ji.jget_signal_indices(rat)
-	#jump_indices = ji.get_jump_indices(rat)
-	
-	#Brute force through different values of r(theta)
-	#Find error of each on
-	rationals = np.arange(-1,1,0.01)
-	rTrue = 0
-	e = []
-	for r in rationals:
-		print(r)
-		slopes = [(n,SLOPES[n](r)) for n in included_clusters]
-		slopes = OrderedDict(slopes)
-		bisecting_slopes= find_bisector(slopes)
-		vertices = polygon_vertices(bisecting_slopes, included_clusters)
-		cluster = poly_cluster(jumps[:,0:2], vertices)
-		cluster = shuffle(jumps[:,0:2], cluster, slopes)
-		e.append(cost_function(jumps[:,0:2], cluster, slopes))
-	
-	#take r with min eror
-	e = np.array(e)
-	r_min = rationals[np.where(e==min(e))][0]
-	print('r_min=' + str(r_min)) 
-	slopes = [(n,SLOPES[n](r_min)) for n in included_clusters]
-	slopes = OrderedDict(slopes)
-	bisecting_slopes= find_bisector(slopes)
-	vertices = polygon_vertices(bisecting_slopes, included_clusters)
-	cluster = poly_cluster(jumps[:,0:2], vertices)
-	cluster = shuffle(jumps[:,0:2], cluster, slopes)
-
-	plot_jumps(jumps[:,0:2], cluster, slopes)
-	
-	#plot_polygons(vertices, slopes)
-	
-	fig_error = plt.figure()
-	ax_error = fig_error.add_subplot(111)
-	ax_error.plot(rationals, e)
-	ax_error.set_xlabel('theta')
-	ax_error.set_ylabel('error')
-	ax_error.set_title("r = " + str(r_min))
-	fig_error.show()
-	
-	#print(slopes)
-
-	return cluster, slopes
-	"""
-	for jump_index in jump_indices:
-		ji.update_cluster(jump_index, cluster)
-	#point_browser.PointBrowser(ji)
-	"""
-	
-
 if __name__ == "__main__":
 	#Define command line arguments accepted
 	#parser = argparse.ArgumentParser()
 	#parser.add_argument("-f", "--fileName", help="Data path")
-	#parser.add_argument("-r", "--rat", help="Rat Name")
+	#parser.add_argument("-theta", "--rat", help="Rat Name")
 	dbPath = '/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db'
 	ji = jump_interface.JumpInterface(dbPath)
 	#args = parser.parse_args()
