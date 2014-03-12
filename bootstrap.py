@@ -6,7 +6,7 @@ import minimize_cost
 from IPython import embed
 
 DB_PATH = "/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db"
-NUM_ITERATIONS = 200
+NUM_ITERATIONS = 1000
 
 RAT_CLUSTERS = {'V1':[3,6], 'V2':[3,6], 'V3':[3,6], 'V4':[1,2,3,4,5,6,7,8],
         'V5':[3,6], 'V6':[1,2,3,4,5,6,7,8], 'V15':[1,3,6,8], 'V17':[3,6], 
@@ -17,63 +17,55 @@ def resample(data):
 
     return data[idx,:]
 
-def find_std(measurements, NUM_ITERATIONS):
-    u = np.mean(measurements)
-
-    return np.sqrt(sum((measurements-u)**2)/(NUM_ITERATIONS-1))
-
 def confidence_interval(measurements, confidence):
-    fig1, ax1 = plt.subplots()
-    bins, edges, _ = ax1.hist(measurements, bins=np.sqrt(len(measurements)), 
-        normed=True, cumulative=True)
-    fig2, ax2 = plt.subplots()
-    ax2.hist(measurements, bins=np.sqrt(len(measurements)),
-        normed=True, cumulative=False)
+    num_bins = int(np.sqrt(len(measurements)))
+    plt.hist(measurements, bins=num_bins)
+    density, edges = np.histogram(measurements, bins=num_bins)
+    density = density / float(sum(density))
+    distribution = np.cumsum(density)
 
-    a = sum(bins < confidence)
+    a = sum(distribution < confidence)
     a = edges[a]
-    b = len(edges) - sum(bins > (1-confidence))
+    b = len(edges) - sum(distribution > (1-confidence))
     b = edges[b]
-    #embed()
 
     return [a,b]
 
 def main(data, estimator):
     if not hasattr(estimator, '__call__'):
-        raise Exception("estimator must be a function")    
+        raise Exception("Variable estimator must be a function.")
+    if not isinstance(data, np.ndarray):
+        raise Exception("Variable data must be a numpy array.")     
 
-    theta = []
-    b = []
+    measurements = np.zeros((NUM_ITERATIONS, data.shape[1]))
     error_count = 0
     
     for n in range(NUM_ITERATIONS):
         if n%10 == 0: print(n)
         try:
-            resampled_data = resample(jumps)
-            t, i = estimator(resampled_data, RAT_CLUSTERS[rat])
-            theta.append(t)
-            b.append(i)
+            resampled_data = resample(data)
+            measurements[n,:] = estimator(resampled_data, RAT_CLUSTERS[rat])
         except:
             error_count += 1
 
-    theta_confidence = confidence_interval(theta, 0.05)
-    b_confidence = confidence_interval(b, 0.05)
-    
+    confidence = [confidence_interval(m, 0.05) for m in measurements.T]
+
     print('error_count=' + str(error_count))
-    print('theta_mean=' + str(sum(theta)/len(theta)))
-    print('theta_confidence=' + str(theta_confidence))
-    print('b_mean=' + str(sum(b)/len(b)))
-    print('b_confidence=' + str(b_confidence))
+    print('theta_mean=' + str(np.mean(measurements[:,0])))
+    print('theta_confidence=' + str(confidence[0]))
+    print('b_mean=' + str(np.mean(measurements[:,1])))
+    print('b_confidence=' + str(confidence[1]))
 
-
-    plt.show()
+    return measurements, confidence
 
 if __name__ == '__main__':
-    rat = 'V6'
     ji = jump_interface.JumpInterface(DB_PATH)
-    jumps = ji.get_jumps(rat)[:,0:2]
-
-    main(jumps, minimize_cost.main)
+    
+    rats = ['V5', 'V15', 'V17', 'V18', 'V31', 'V32']
+    for rat in rats:
+        jumps = ji.get_jumps(rat)[:,0:2]
+        measurements, confidence = main(jumps, minimize_cost.main)
+        np.save(rat+'_measurements', measurements)
 
 
 

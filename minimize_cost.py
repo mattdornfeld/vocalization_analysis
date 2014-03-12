@@ -9,10 +9,7 @@ import brewer2mpl as brew
 from collections import OrderedDict
 from scipy.optimize import fmin_ncg
 import poly_cluster
-
-global theta_vec, error
-theta_vec = []
-error = []
+from matplotlib import animation
 
 def slope(n1, n2, theta):
 	return float(n2-theta) / (n1-theta)
@@ -64,7 +61,7 @@ def dcost(x, *args):
 	dcost_b = 0
 	for c in h.keys(): 
 		idx = find(cluster==c)
-		l = len(jumps)
+		l = len(jumps[idx,:])
 		for j in jumps[idx,:]:
 			x = (j[0] / h[c] + j[1] - b) / (h[c] + 1 / h[c])
 			y = h[c] * x + b 
@@ -98,7 +95,7 @@ def cost(x, *args):
 	cost = 0 
 	for c in h.keys(): 
 		idx = find(cluster==c)
-		l = len(jumps)
+		l = len(jumps[idx,:])
 		for j in jumps[idx,:]:
 			x = (j[0] / h[c] + j[1] - b) / (h[c] + 1 / h[c])
 			y = h[c] * x + b 
@@ -106,69 +103,95 @@ def cost(x, *args):
 
 	return cost
 
-def callback(xk):
-	global theta_vec, error
-	theta_vec += [xk[0]]
-	error += [cost(xk, jumps, included_clusters)]
+def cost_animator(n, *args):
+	line = args[0]
+	theta = args[1]
+	error = args[2]
+	line.set_data(theta[0:n], error[0:n])
+	line.set_marker('o')
+	line.set_linestyle('')
+	line.set_color('red')
+
+	return line,
 
 
+def update_cluster_animator(n, line, jumps, cluster_frame, h_frame, 
+	included_clusters):
+	cluster = cluster_frame[n]
+	h = h_frame[n]
+	f1 = np.arange(20e3,80e3,100)
+	for i, c  in enumerate(included_clusters):
+		idx = find(cluster==c)
+		line[i].set_data(jumps[idx,0],jumps[idx,1])
+		line[i+l/2].set_data(f1, h[c]*f1)
+
+
+	return line
+
+def animate_clustering(jumps, included_clusters, trajectory):
+	"""
+	fig = plt.figure()
+	ax = plt.axes(xlim=(0, 1), ylim=(0, 4e7))
+	line, = ax.plot([], [], lw=2)
+	"""
+
+	"""
+	theta = np.arange(0,1,0.01)
+	error = np.array([cost([t,10], jumps, included_clusters) for t in theta])
+	ax.plot(theta, error)
+	"""
+
+	fig = plt.figure()
+	ax = plt.axes(xlim=(20e3, 80e3), ylim=(20e3, 80e3))
+	line = []
+	l = 2*len(included_clusters)
+	for i in range(l):
+		line += ax.plot([],[])
+	
+	for i in range(l/2):
+		c = included_clusters[i]
+		line[i].set_color(LEGEND[c][1])
+		line[i].set_linestyle('')
+		line[i].set_marker('o')
+		line[i].set_markersize(2)
+		line[i+l/2].set_color(LEGEND[c][1])
+		line[i+l/2].set_linestyle('-')
+
+	theta = trajectory[:,0]
+	h_frame = []
+	cluster_frame = []
+	for t in theta:
+		h = OrderedDict([(n,SLOPES[n](t)) for n in included_clusters])
+		h_frame += [h]
+		cluster_frame += [poly_cluster.main(jumps, h, included_clusters)]
+	#error = np.array([cost([t,10], jumps, included_clusters) for t in theta])
+	anim = animation.FuncAnimation(fig, update_cluster_animator, 
+		fargs = (line, jumps, cluster_frame, h_frame, included_clusters), 
+		init_func=None, frames=len(theta), interval=1000, blit=True)
+
+	
+	"""
+	anim = animation.FuncAnimation(fig, cost_animator, 
+		fargs = (line, theta, error), 
+		init_func=None, frames=len(trajectory)+1, interval=400, blit=True)
+	"""
+
+	plt.show()
 
 def main(jumps, included_clusters = range(NUM_CLUSTERS)):
-	theta_min, b_min = fmin_ncg(f=cost, x0=[0.5,0], fprime=dcost,
-	 args=(jumps, included_clusters), avextol=1e-5, disp=0, callback=None)
-	
-theta = np.arange(0,1,0.01)
-error = np.array([cost([t,10], jumps, included_clusters) for t in theta])
-derror = np.array([dcost([t,10], jumps, included_clusters)[0] for t in theta])
+	mins, trajectory = fmin_ncg(f=cost, x0=[0.36,0], fprime=dcost,
+	 args=(jumps, included_clusters), avextol=1e-5, disp=0, callback=None, 
+	 retall=True)
 
-plt.plot(theta, error)
-for i in range(0,len(derror),10):
-	plt.arrow(theta[i], error[i], 1/10., derror[i]/10, shape='full')
-	plt.show()
-
+	theta_min = mins[0]
+	b_min = mins[1]
+	trajectory = np.array(trajectory)
+	#embed()
+	#animate_clustering(jumps, included_clusters, trajectory)
 	print(theta_min)
 	print(b_min)
-	return theta_min, b_min
-
-def plot_jumps(jumps, cluster, slopes):
-	num_clusters = len(slopes)
-	fig1 = plt.figure(figsize=(12, 12), dpi=100)
-
-	ax1 = fig1.add_subplot(111, aspect='equal')
-	#ax1.set_title('After Jump Frequency Vs Before Jump Frequency')
-	ax1.set_xlabel('f1', size=12)
-	ax1.set_ylabel('f2', size=12)
-	#transitions = [str(n+1)+' to ' +str(n) for n in range(2,6)]
-	#transitions = transitions+[str(n)+' to ' +str(n+1) for n in range(5,1,-1)]
-
-	f = np.arange(20e3, 80e3, 100)
-	for c in slopes.keys():
-		#plot the data set a second time and color code them by cluster
-		idx = find(cluster==c)
-		if len(idx)==0: continue
-		minf = np.amin(jumps[idx,:][:,0])
-		maxf = np.amax(jumps[idx,:][:,0])
-		line, = ax1.plot(jumps[idx,:][:,0],jumps[idx,:][:,1], 'o', 
-			markersize=2.3, color = LEGEND[c][1], label=LEGEND[c][0])
-		line, = ax1.plot(f, slopes[c]*f, color = LEGEND[c][1])
-
-	#create legend ax_jumps.legend()
-	handles, labels = ax1.get_legend_handles_labels()
-	rect = [0.73, 0.758, 0.1, 0.15] #l,b,w,h
-	ax_legend = fig1.add_axes(rect)
-	ax_legend.get_xaxis().set_visible(False)
-	ax_legend.get_yaxis().set_visible(False)
-	ax_legend.set_axis_bgcolor((0.75, 0.75, 0.75, 1.0))
-	ax_legend.set_frame_on(False)
-	ax_legend.legend(handles[::-1], labels[::-1],
-	 markerscale=3, numpoints=1)
-
-	#set axis limits
-
-	ax1.set_xlim(f[0], f[-1])
-	ax1.set_ylim(f[0], f[-1])
-	plt.show()
-	#fig1.savefig(rat+'.png', bbox_inches='tight', pad_inches=0)	
+	
+	return [theta_min, b_min]
 
 if __name__ == "__main__":
 	dbPath = '/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db'
