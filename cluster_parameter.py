@@ -12,6 +12,7 @@ from functools import partial
 import brewer2mpl as brew
 from collections import OrderedDict
 from scipy.optimize import fmin_ncg
+import poly_cluster
 
 def slope(n1, n2, theta):
 	return float(n2-theta) / (n1-theta)
@@ -49,23 +50,21 @@ NUM_CLUSTERS = len(LEGEND) - 1
 def dcost(x, *args):
 	theta = x[0]
 	b = x[1]
-	included_clusters = args[0]
-	jumps = args[1]
-
-	h = [(n, SLOPES[n](theta)) for n in included_clusters]
+	jumps = args[0]
+	included_clusters = args[1]
+	h = [(n,SLOPES[n](theta)) for n in included_clusters]
 	h = OrderedDict(h)
 	dh = [(n, DSLOPES[n](theta)) for n in included_clusters]
 	dh = OrderedDict(dh)
-	bisecting_slopes= find_bisector(h)
-	vertices = polygon_vertices(bisecting_slopes, included_clusters)
-	cluster = poly_cluster(jumps[:,0:2], vertices)
+	
+	cluster = poly_cluster.main(h)
 
 	dcost_theta = 0
 	dcost_b = 0
 	for c in h.keys(): 
 		idx = find(cluster==c)
-		l = len(jumps[idx,0:2])
-		for j in jumps[idx,0:2]:
+		l = len(jumps)
+		for j in jumps:
 			x = (j[0] / h[c] + j[1] - b) / (h[c] + 1 / h[c])
 			y = h[c] * x + b 
 			dx_theta = ((h[c]**2 + 1) * (j[1] - b) * dh[c] - 
@@ -86,20 +85,18 @@ def dcost(x, *args):
 def cost(x, *args):
 	theta = x[0]
 	b = x[1]
-	included_clusters = args[0]
-	jumps = args[1]
-
+	jumps = args[0]
+	included_clusters = args[1]
 	h = [(n,SLOPES[n](theta)) for n in included_clusters]
 	h = OrderedDict(h)
-	bisecting_slopes = find_bisector(h)
-	vertices = polygon_vertices(bisecting_slopes, included_clusters)
-	cluster = poly_cluster(jumps[:,0:2], vertices)
+
+	cluster = poly_cluster.main(h)
+
 	cost = 0 
 	for c in h.keys(): 
 		idx = find(cluster==c)
-		l = len(jumps[idx,0:2])
-		print(l)
-		for j in jumps[idx,0:2]:
+		l = len(jumps)
+		for j in jumps:
 			x = (j[0] / h[c] + j[1] - b) / (h[c] + 1 / h[c])
 			y = h[c] * x + b 
 			cost += (((j[0] - x)**2 + (j[1]-y)**2)) / l 
@@ -109,73 +106,18 @@ def cost(x, *args):
 	#print('cost='+str(cost))
 	return cost
 
-#takes an array of slopes and returns the slopes of the bisectors of these lines sorted along with the original slopes	
-def find_bisector(slopes):
-	keys = slopes.keys()
-	bisecting_slopes = np.zeros(len(slopes)-1)
-	for i, c in enumerate(keys):
-		if c == keys[-1]: break
-		m1 = slopes[c] 
-		m2 = slopes[keys[i+1]]
-		bisecting_slopes[i] = tan(atan(m1)/2 + atan(m2)/2)
-	
-	return bisecting_slopes
 
-#takes slopes of lines, min, and max x values. returns vertices of quadrigon that lie on lines at min and max values. 
-def polygon_vertices(slopes, included_clusters, minf = 20e3, maxf = 85e3):
-	#vertices = [0 for x in range(len(slopes)+1)]
-	vertices = [(n,[]) for n in included_clusters]
-	vertices = OrderedDict(vertices)
-	
-	for i, m1 in enumerate(slopes):
-		c = included_clusters[i] 
-		if i == 0:
-			vertices[c] = np.array([(minf, 0), (minf, m1*minf), (maxf, m1*maxf),
-			 (maxf, 0), (minf, 0)])
-		else:
-			m2 = slopes[i-1]
-			vertices[c] = np.array([(minf, minf*m2), (maxf, m2*maxf), 
-				(maxf, m1*maxf), (minf, m1*minf), (minf, minf*m2)]			)
-		
-	m1 = slopes[-1]
-	vertices[included_clusters[-1]] = np.array([(minf, m1*minf),
-	 (minf, m1*maxf), (maxf, m1*maxf), (minf, m1*minf), (minf, m1*minf)])
-			
-	return vertices
-
-#creates polygons based on the lines in slopes and checks to see which jumps are in which polygon
-def poly_cluster(jumps, vertices, codes = 
-	[Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY]):
-
-	cluster = -1*np.ones(len(jumps))
-	num_clusters = len(vertices)
-	for c, v in vertices.iteritems():
-		poly = Path(v, codes, closed = True)
-		for ij, j in enumerate(jumps):
-			if poly.contains_point(j)==1:
-				cluster[ij] = c
-	
-	return cluster
 
 def main(jumps, included_clusters = range(NUM_CLUSTERS)):
-	#Organize input from db and command line
-	#dbPath = args.fileName
-	#rat = args.rat
-	#jumps = ji.get_jumps(rat)
-	#signal_indices = ji.jget_signal_indices(rat)
-	#jump_indices = ji.get_jump_indices(rat)
-	
-	#Brute force through different values of theta(theta)
-	#Find error of each on
 	"""
 	fig, ax = plt.subplots()
 	ax.plot(jumps[:,0], jumps[:,1], 'o')
 	plt.show()
 	"""
+	
+
 	theta_min, b_min  = fmin_ncg(f=cost, x0=[0,0], fprime=dcost,
-	 args=(included_clusters,jumps), avextol=1e-5)
-	#take theta with min eror
-	#print('r_min=' + str(r_min))
+	 args=(jumps, included_clusters), avextol=1e-5, disp=0)
 	""" 
 	slopes = [(n,SLOPES[n](r_min)) for n in included_clusters]
 	slopes = OrderedDict(slopes)
@@ -286,6 +228,6 @@ if __name__ == "__main__":
 	"""
 	rat_clusters={'V6':[1,2,3,4,5,6,7,8]}
 	for rat, included_clusters in rat_clusters.iteritems():
-		jumps = ji.get_jumps(rat)
+		jumps = ji.get_jumps(rat)[:,0:2]
 		main(jumps, included_clusters)
 

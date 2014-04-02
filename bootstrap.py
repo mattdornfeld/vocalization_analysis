@@ -31,7 +31,7 @@ def confidence_interval(measurements, confidence):
 
     return [a,b]
 
-def main(data, estimator):
+def main(data, initial, estimator):
     if not hasattr(estimator, '__call__'):
         raise Exception("Variable estimator must be a function.")
     if not isinstance(data, np.ndarray):
@@ -44,7 +44,7 @@ def main(data, estimator):
         if n%10 == 0: print(n)
         try:
             resampled_data = resample(data)
-            measurements[n,:] = estimator(resampled_data, RAT_CLUSTERS[rat])
+            measurements[n,:] = estimator(resampled_data, initial, RAT_CLUSTERS[rat])
         except:
             error_count += 1
 
@@ -61,53 +61,10 @@ def main(data, estimator):
 if __name__ == '__main__':
     ji = jump_interface.JumpInterface(DB_PATH)
     
-    rats = ['V5', 'V15', 'V17', 'V18', 'V31', 'V32']
-    for rat in rats:
+    rats = ['V2']
+    initials = [[0.38,0]]
+    for rat, initial in zip(rats, initials):
         jumps = ji.get_jumps(rat)[:,0:2]
-        measurements, confidence = main(jumps, minimize_cost.main)
+        measurements, confidence = main(jumps, initial, minimize_cost.main)
         np.save(rat+'_measurements', measurements)
 
-
-
-
-
-"""
-fig = plt.figure()
-ax = fig.add_subplot(111)
-
-ax.plot(jumps[:,0], jumps[:,1], 'o', markersize=2)
-plt.show()
-"""
-
-"""
-patch = patches.PathPatch(poly, facecolor='orange', lw=2)
-ax.add_patch(patch)
-ax.set_xlim(f1_min, f1_max)
-ax.set_ylim(f2_min, f2_max)
-plt.show()
-    x1_min = floor(np.amin(data[:,0]))
-    x1_max = ceil(np.amax(data[:,0]))
-    x2_min = floor(np.amin(data[:,1]))
-    x2_max = ceil(np.amax(data[:,1]))
-
-    x1_blocks = np.arange(x1_min, x1_max, BLOCK_SIZE)
-    x2_blocks = np.arange(x2_min, x2_max, BLOCK_SIZE)
-
-    num_rows = len(x1_blocks)
-    num_cols = len(x2_blocks)
-      x1_idx = np.random.randint(0, num_rows-1, NUM_BLOCKS)
-    x2_idx = np.random.randint(0, num_cols-1, NUM_BLOCKS)
-    
-    verts = []
-    codes = []
-
-    for i, j in zip(x1_idx, x2_idx):
-        verts += [(x1_blocks[i], x2_blocks[j])]
-        verts += [(x1_blocks[i], x2_blocks[j+1])]
-        verts += [(x1_blocks[i+1], x2_blocks[j+1])]
-        verts += [(x1_blocks[i+1], x2_blocks[j])]
-        verts += [(x1_blocks[i], x2_blocks[j])]
-        codes += [Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO, Path.LINETO]
-
-    poly = Path(verts, codes)
-"""

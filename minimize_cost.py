@@ -178,8 +178,8 @@ def animate_clustering(jumps, included_clusters, trajectory):
 
 	plt.show()
 
-def main(jumps, included_clusters = range(NUM_CLUSTERS)):
-	mins, trajectory = fmin_ncg(f=cost, x0=[0.36,0], fprime=dcost,
+def main(jumps, initial, included_clusters = range(NUM_CLUSTERS)):
+	mins, trajectory = fmin_ncg(f=cost, x0=initial, fprime=dcost,
 	 args=(jumps, included_clusters), avextol=1e-5, disp=0, callback=None, 
 	 retall=True)
 
@@ -188,8 +188,6 @@ def main(jumps, included_clusters = range(NUM_CLUSTERS)):
 	trajectory = np.array(trajectory)
 	#embed()
 	#animate_clustering(jumps, included_clusters, trajectory)
-	print(theta_min)
-	print(b_min)
 	
 	return [theta_min, b_min]
 
