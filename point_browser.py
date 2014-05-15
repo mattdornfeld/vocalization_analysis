@@ -37,6 +37,16 @@ CLUSTERS = OrderedDict([(0, {'n1':2, 'n2':1}), (1, {'n1':3, 'n2':2}),
 
 NUM_CLUSTERS = len(LEGEND) - 1
 
+def low_h(mt, thresh):
+	pt = sum(mt,0)
+	pn = mt / pt
+	valid = -sum(pn*np.log2(pn),0) #entropy as a function of time
+	average_h = sum(valid)/len(valid) #time average of H
+	valid[valid<thresh] = 1
+	valid[valid>thresh] = 0
+
+	return valid, average_h
+
 class PointBrowser:
 	def __init__(self, rat, ji):
 		self.ji = ji
@@ -173,13 +183,14 @@ class PointBrowser:
 				line, = self.ax_jumps.plot(f, f*self.slopes[self.rat][c], 
 					color = LEGEND[c][1])
 
+		"""
 		#plot histogram
 		hist, bins = np.histogram(
 			self.jumps[self.rat][:,1]/self.jumps[self.rat][:,0], bins=50)
 		width = 0.7 * (bins[1] - bins[0])
 		center = (bins[:-1] + bins[1:]) / 2
 		self.ax_hist.bar(center, hist, align='center', width=width)
-
+		"""
 		"""
 		for c in self.included_clusters[self.rat]:
 			n1 = CLUSTERS[c]['n1']
@@ -195,6 +206,7 @@ class PointBrowser:
 
 
 		
+		"""
 		#create legend self.ax_jumps.legend()
 		handles, labels = self.ax_jumps.get_legend_handles_labels()
 		rect = [0.73, 0.758, 0.1, 0.15] #l,b,w,h
@@ -205,6 +217,7 @@ class PointBrowser:
 		self.ax_legend.set_frame_on(False)
 		self.ax_legend.legend(handles[::-1], labels[::-1],
 		 markerscale=3, numpoints=1)
+		"""
 		
 		
 
@@ -341,17 +354,20 @@ class PointBrowser:
 		tstep = 30
 		tskip = 100
 		nf2=nf/2+1 #number of display points
-		yconv=int(self.fs/(2*nf2))
+		yconv = int(self.fs/(2*nf2))
 		yskip = 10e3/yconv
 
 		#calculate mgram
 		mgram = tfr.tfr_spec(self.signal, nf, tstep, nf)
 		mgram[mgram==0] = np.amin(mgram[mgram>0])
+		valid, _ = low_h(mgram, thresh=6.9)
+		valid.shape = (len(valid),1)
+		self.s = self.s * valid
 
 		#setup labels
 		#self.ax_mgram.set_title('Reassinged Spectrogram With Curve Fit')
-		self.ax_mgram.set_xlabel('Time (s)')
-		self.ax_mgram.set_ylabel('Frequency (Hz)')
+		self.ax_mgram.set_xlabel('Time (s)', size=40)
+		self.ax_mgram.set_ylabel('Frequency (Hz)', size=40)
 
 		#setup time axis coordinates 
 		t_axis_coords = np.arange(0, mgram.shape[1] , tskip)
@@ -361,29 +377,33 @@ class PointBrowser:
 		self.ax_mgram.set_xticks(t_axis_coords)
 		self.ax_mgram.set_xticklabels(t_data_coords)
 
-		#setup frequency axis coordintes
-		f_axis_coords = np.arange(0, nf2, int(yskip))
+		#setup frequency axis 
+		print(yskip)
+		f_axis_coords = np.arange(0, nf2, yskip)
 		print(f_axis_coords)
 		f_data_coords = np.arange(0, self.fs/2, yskip*yconv)
 		print(f_data_coords)
 		self.ax_mgram.set_yticks(f_axis_coords)
 		self.ax_mgram.set_yticklabels(f_data_coords)
+		self.ax_mgram.tick_params(axis='both', which='major', labelsize=20)
 
 		#plot mgram
-		self.ax_mgram.imshow(np.log(mgram), vmin=np.mean(np.log(mgram)), 
+		im = self.ax_mgram.imshow(np.log(mgram), vmin=np.mean(np.log(mgram)), 
 			origin='lower')
+		im.set_cmap('gray')
 
 		"""
 		plot jumps and fitted curve in axis (reassinged) coordinates
 		the data coordinates are for display only
 		"""
-		self.ax_mgram.plot(self.t*self.fs/tstep, self.s/yconv, color='green', 
-			label='Fitted Curve')
+		self.ax_mgram.plot(self.t*self.fs/tstep, self.s/yconv, color='orange', 
+			label='Fitted Curve', linewidth='3')
 		self.ax_mgram.plot(self.jump[2]*self.fs/tstep, self.jump[0]/yconv, 
-			'mo', label='Jump Points')
-		self.ax_mgram.plot(self.jump[3]*self.fs/tstep, self.jump[1]/yconv,'ro')
+			label='Jump Points', marker='o', color='#6599FF', markersize=8)
+		self.ax_mgram.plot(self.jump[3]*self.fs/tstep, self.jump[1]/yconv, 
+			marker='o', color='#6599FF', markersize=8)
 
-		"""
+		
 		handles, labels = self.ax_mgram.get_legend_handles_labels()
 		rect = [0.1, 0.8, 0.1, 0.15] #l,b,w,h
 		self.ax_mgram_legend = self.fig_mgram.add_axes(rect)
@@ -392,7 +412,7 @@ class PointBrowser:
 		self.ax_mgram_legend.set_axis_bgcolor((0.75, 0.75, 0.75, 1.0))
 		self.ax_mgram_legend.set_frame_on(False)
 		self.ax_mgram_legend.legend(handles, labels, markerscale=3)
-		"""
+		
 
 		self.fig_mgram.canvas.draw()
 

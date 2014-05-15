@@ -146,7 +146,9 @@ def plot_jumps(jumps, cluster, slopes):
 
 	ax1 = fig1.add_subplot(111, aspect='equal')
 	#ax1.set_title('After Jump Frequency Vs Before Jump Frequency')
-	ax1.set_xlabel('f1', size=12)
+	plt.rc('text', usetex=True)
+	plt.rc('font', family='serif')
+	ax1.set_xlabel(r'f1', fontsize=16)
 	ax1.set_ylabel('f2', size=12)
 	#transitions = [str(n+1)+' to ' +str(n) for n in range(2,6)]
 	#transitions = transitions+[str(n)+' to ' +str(n+1) for n in range(5,1,-1)]
@@ -163,6 +165,7 @@ def plot_jumps(jumps, cluster, slopes):
 		line, = ax1.plot(f, slopes[c]*f, color = LEGEND[c][1])
 
 	#create legend ax_jumps.legend()
+	"""
 	handles, labels = ax1.get_legend_handles_labels()
 	rect = [0.73, 0.758, 0.1, 0.15] #l,b,w,h
 	ax_legend = fig1.add_axes(rect)
@@ -172,6 +175,7 @@ def plot_jumps(jumps, cluster, slopes):
 	ax_legend.set_frame_on(False)
 	ax_legend.legend(handles[::-1], labels[::-1],
 	 markerscale=3, numpoints=1)
+	"""
 
 	#set axis limits
 
