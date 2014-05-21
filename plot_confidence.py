@@ -5,6 +5,8 @@ import jump_interface
 import minimize_cost
 import os
 from IPython import embed
+from collections import OrderedDict
+from math import sqrt
 
 DB_PATH = "/media/matthew/1f84915e-1250-4890-9b74-4bfd746e2e5a/jump.db"
 RAT_CLUSTERS = {'V1':[3,6], 'V2':[3,6], 'V3':[3,6], 'V4':[1,2,3,4,5,6,7,8],
@@ -55,15 +57,17 @@ def confidence_interval(measurements, confidence=0.025):
 def plot_results():
 	ji = jump_interface.JumpInterface(DB_PATH)
 	rats = ['V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V15', 'V17', 'V18', 
-	'V31', 'V32']
+	'V31', 'V32', 'edge tone', 'shallow cavity', 'deep cavity', 'hole tone']
+	whistles = {'edge tone':0.54, 'shallow cavity':0.17, 'deep cavity':-0.08, 'hole tone':-0.25}
+	whistles = OrderedDict(whistles)
 	initials = [[.61,0],[0.38,0],[.36,0],[0.2,0],[0.28,0],[0.43,0],[0.5,0],[.25,0],[0.4,0],[0.39,0],[0.64,0]]
 
 	fig_t, ax_t = plt.subplots()
-	ax_t.set_ylim([0,12])
-	ax_t.set_yticks(range(1,12))
+	ax_t.set_ylim([0,len(rats)])
+	ax_t.set_yticks(range(1,len(rats)))
 	ax_t.set_yticklabels(rats)
-	ax_t.set_xlabel('theta')
-	ax_t.set_xlim([-0.1,1])
+	ax_t.set_xlabel('$\gamma$')
+	ax_t.set_xlim([-0.3,1])
 	ax_t.set_ylabel('rat')
 
 	fig_b, ax_b = plt.subplots()
@@ -89,6 +93,10 @@ def plot_results():
 		b_error = confidence_interval(b)
 		ax_t.plot(theta_error, [i,i], color='blue', marker='|')
 		ax_b.plot(b_error, [i,i], color='blue', marker='|')
+		i+=1
+
+	for w, g in whistles.iteritems():
+		ax_t.plot(g, i, 'ro')
 		i+=1
 
 	fig_t.tight_layout()
