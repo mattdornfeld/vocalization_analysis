@@ -9,8 +9,8 @@ from IPython import embed
 import brewer2mpl as brew
 from operator import not_
 from collections import OrderedDict
+from pysciplottk.easyplotter import EasyPlotter
 
-#hello
 """
 Class for investigating jumps. It plots the after vs before jump freqs.You 
 can click on them to display the reassinged spectrogram in another window.
@@ -98,8 +98,9 @@ class PointBrowser:
 		print(self.rat)
 		if 'fig_jumps' not in self.__dict__.keys():
 			#create figures
+			plotter = EasyPlotter('output.pdf','latex,revtex')
 			self.fig_controls = plt.figure()
-			self.fig_jumps = plt.figure()
+			self.fig_jumps = plotter.normal_figure()
 			self.fig_mgram = plt.figure()
 			self.fig_hist = plt.figure()
 			self.fig_hist_phi = plt.figure()

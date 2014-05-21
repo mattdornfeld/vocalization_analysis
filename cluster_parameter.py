@@ -181,7 +181,7 @@ def plot_jumps(jumps, cluster, slopes):
 
 	ax1.set_xlim(f[0], f[-1])
 	ax1.set_ylim(f[0], f[-1])
-	plt.show()
+	#plt.show()
 	#fig1.savefig(rat+'.png', bbox_inches='tight', pad_inches=0)
 
 def plot_polygons(vertices, slopes):

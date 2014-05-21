@@ -1,0 +1,14 @@
+#!/bin/bash
+
+#commit script for publication_layout branch
+
+git add cluster_parameter.py
+git add jump_figure.py
+git add plot_mgram.py
+git add point_browser.py
+git add plot_confidence.py
+git add commit
+
+git commit -m "$1"
+
+git push -u origin publication_layout
