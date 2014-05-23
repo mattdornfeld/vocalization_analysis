@@ -1,19 +1,17 @@
+#!/usr/bin/python
+
 import jump_interface
 import cluster_parameter
 import numpy as np
 import brewer2mpl as brew
 from collections import OrderedDict
-import pylab
+from pylab import *
+
 
 COLOR_MAP = (brew.get_map('Set3', 'qualitative', 10).mpl_colors +
 	brew.get_map('Set2', 'qualitative', 6).mpl_colors)
 
-LEGEND = OrderedDict([(-1,("unclustered", COLOR_MAP[2])), (0,("2 to 1", COLOR_MAP[0])), 
-(1,("3 to 2", COLOR_MAP[15])), (2,("4 to 3", COLOR_MAP[3])), 
-(3,("5 to 4", COLOR_MAP[4])), (4,("6 to 5", COLOR_MAP[5])), 
-(5,("5 to 6", COLOR_MAP[6])), (6,("4 to 5", COLOR_MAP[7])), 
-(7,("3 to 4", COLOR_MAP[8])), (8,("2 to 3", (131./255,39./255,39./255))), 
-(9,("1 to 2", COLOR_MAP[10]))])
+
 
 NUM_CLUSTERS = len(LEGEND) - 1
 
@@ -38,9 +36,8 @@ for r in rats:
 	jumps[r] = ji.get_jumps(r)
 	signal_indices[r] = ji.jget_signal_indices(r)
 	slopes[r] = []
-
-clusters[rat], slopes[rat] = cluster_parameter.main(
-			jumps[rat], included_clusters[rat])	
+	clusters[r], slopes[r] = cluster_parameter.main(
+		jumps[r], included_clusters[r])	
 
 fig_width_pt = 400.0  # Get this from LaTeX using \showthe\columnwidth
 inches_per_pt = 1.0/72.27               # Convert pt to inch
@@ -56,9 +53,16 @@ params = {'savefig.format': 'png',
          'ytick.labelsize': 8,
          'text.usetex': True,
          'figure.figsize': fig_size,
-         'figure.dpi': 100}
+         'figure.dpi': 100,
+         'legend.markerscale':2}
 pylab.rcParams.update(params)
 
+LEGEND = OrderedDict([(-1,(r"unclustered", COLOR_MAP[2])), (0,(r"$2\rightarrow1$", COLOR_MAP[0])), 
+(1,(r"$3\rightarrow2$", COLOR_MAP[15])), (2,(r"$4\rightarrow3$", COLOR_MAP[3])), 
+(3,(r"$5\rightarrow4$", COLOR_MAP[4])), (4,(r"$6\rightarrow5$", COLOR_MAP[5])), 
+(5,(r"$5\rightarrow6$", COLOR_MAP[6])), (6,(r"$4\rightarrow5$", COLOR_MAP[7])), 
+(7,(r"$3\rightarrow4$", COLOR_MAP[8])), (8,(r"$2\rightarrow3$", (131./255,39./255,39./255))), 
+(9,(r"$1\rightarrow2$", COLOR_MAP[10]))])
 rat = 'V4'
 fig_jumps = plt.figure()
 ax_jumps = fig_jumps.add_subplot(111, aspect='equal')
@@ -80,6 +84,9 @@ for c in included_clusters[rat]:
 	if len(slopes[rat]) != 0:
 		line, = ax_jumps.plot(f, f*slopes[rat][c], 
 			color = LEGEND[c][1])
+
+handles, labels = ax_jumps.get_legend_handles_labels()
+legend = ax_jumps.legend(handles[::-1], labels[::-1],loc='lower right', numpoints=1, shadow=True)
 fig_jumps.canvas.draw()
 fig_jumps.savefig('/home/matthew/work/writing/jump_paper/'+rat)
 
@@ -105,6 +112,8 @@ for c in included_clusters[rat]:
 	if len(slopes[rat]) != 0:
 		line, = ax_jumps.plot(f, f*slopes[rat][c], 
 			color = LEGEND[c][1])
-fig_jumps.canvas.draw()		
+
+		
+fig_jumps.canvas.draw()
+
 fig_jumps.savefig('/home/matthew/work/writing/jump_paper/'+rat)
-plt.close('all')

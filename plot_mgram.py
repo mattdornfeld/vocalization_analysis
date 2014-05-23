@@ -1,7 +1,8 @@
 import numpy as np
-import matplotlib.pyplot as pyplot
+import matplotlib.pyplot as plt
 import libtfr as tfr
 import jump_interface
+from math import sqrt
 
 def set_rc_parameters():
 	fig_width_pt = 400.0  # Get this from LaTeX using \showthe\columnwidth
@@ -19,7 +20,8 @@ def set_rc_parameters():
 	         'ytick.labelsize': 8,
 	         'text.usetex': True,
 	         'figure.figsize': fig_size,
-	         'figure.dpi': 100}
+	         'figure.dpi': 100,
+	         'image.aspect': 2}
 	plt.rcParams.update(params)
 
 def get_signal_data(ji, jump_index):
@@ -62,7 +64,7 @@ def graph_mgram(signal, s, t, jumps, fs):
 	#setup labels
 	#ax_mgram.set_title('Reassinged Spectrogram With Curve Fit')
 	fig_mgram = plt.figure()
-	ax_mgram = fig_mgram.add_subplot(111, adjustable='box', aspect=10)
+	ax_mgram = fig_mgram.add_subplot(111)
 	ax_mgram.set_xlabel('Time (s)')
 	ax_mgram.set_ylabel('Frequency (Hz)')
 
@@ -96,11 +98,10 @@ def graph_mgram(signal, s, t, jumps, fs):
 
 	#plot mgram
 	im = ax_mgram.imshow(np.log(mgram), vmin=np.mean(np.log(mgram)), 
-		origin='lower')
+		origin='lower', aspect='auto')
 	im.set_cmap('Purples')
 
 	ax_mgram.set_ylim([0,80e3/yconv])
-	ax_mgram.set_aspect
 	fig_mgram.tight_layout()
 	fig_mgram.savefig('/home/matthew/work/writing/jump_paper/specgram.png')
 
@@ -111,4 +112,5 @@ if __name__ == '__main__':
 	ji = jump_interface.JumpInterface(dbPath)
 	signal, s, t, jumps, fs = get_signal_data(ji,jump_index)
 	graph_mgram(signal, s, t, jumps, fs)
+	plt.show()
 
