@@ -12,6 +12,26 @@ from IPython import embed
 from functools import partial
 import brewer2mpl as brew
 from collections import OrderedDict
+from raw import *
+
+fig_width_pt = 400.0  # Get this from LaTeX using \showthe\columnwidth
+inches_per_pt = 1.0/72.27               # Convert pt to inch
+#golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
+fig_width = fig_width_pt*inches_per_pt  # width in inches
+fig_height = fig_width      # height in inches
+fig_size =  [fig_width,fig_height]
+
+params = {'savefig.format': 'png',
+	         'axes.labelsize': 14,
+	         'text.fontsize': 14,
+	         'legend.fontsize': 10,
+	         'xtick.labelsize': 8,
+	         'ytick.labelsize': 8,
+	         'text.usetex': True,
+	         'figure.figsize': fig_size,
+	         'figure.dpi': 100,
+	         'legend.markerscale':2}
+plt.rcParams.update(params)
 
 def slope(n1, n2, r):
 	return float(n2-r) / (n1-r)
@@ -262,14 +282,17 @@ def main(jumps, included_clusters = range(NUM_CLUSTERS)):
 	fig_error = plt.figure()
 	ax_error = fig_error.add_subplot(111)
 	ax_error.plot(rationals, e)
-	ax_error.set_xlabel('theta')
-	ax_error.set_ylabel('error')
-	ax_error.set_title("r = " + str(r_min))
-	fig_error.show()
-	
+	ax_error.set_xlabel(r'$\gamma$')
+	ax_error.set_ylabel(r'error')
+	"""
+	s = '$\gamma_{min}=' + str(r_min) + '$'
+	s = s.encode('string-escape')
+	ax_error.set_title(s)
+	"""
+
 	#print(slopes)
 
-	return cluster, slopes
+	return cluster, slopes, fig_error
 	"""
 	for jump_index in jump_indices:
 		ji.update_cluster(jump_index, cluster)
