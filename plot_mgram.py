@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import libtfr as tfr
 import jump_interface
 from math import sqrt
+from matplotlib.ticker import MultipleLocator
 
 def set_rc_parameters():
 	fig_width_pt = 400.0  # Get this from LaTeX using \showthe\columnwidth
@@ -49,7 +50,7 @@ def graph_mgram(signal, s, t, jumps, fs):
 	#define constants
 	nf = 512
 	tstep = 30
-	tskip = 250
+	tskip = 300
 	nf2=nf/2+1 #number of display points
 	yconv = int(fs/(2*nf2))
 	fskip = 20e3/yconv
@@ -76,11 +77,23 @@ def graph_mgram(signal, s, t, jumps, fs):
 	ax_mgram.set_xticks(t_axis_coords)
 	ax_mgram.set_xticklabels(t_data_coords)
 
+	#setup time axis minor ticks
+	tskip = tskip/10 
+	t_axis_coords = np.arange(0, mgram.shape[1] , tskip)
+	t_data_coords = np.array([round(elem, 2) for elem in t_data_coords])
+	ax_mgram.set_xticks(t_axis_coords, minor=True)
+
 	#setup frequency axis 
 	f_axis_coords = np.arange(0, nf2, fskip)
 	f_data_coords = np.arange(0, fs/2, fskip*yconv)
 	ax_mgram.set_yticks(f_axis_coords)
 	ax_mgram.set_yticklabels(f_data_coords)
+
+	#setup frequency axis minor ticks
+	fskip = fskip/5
+	f_axis_coords = np.arange(0, nf2, fskip)
+	ax_mgram.set_yticks(f_axis_coords, minor=True)
+	
 	ax_mgram.tick_params(axis='both', which='major', labelsize=20)
 
 	for label in (ax_mgram.get_xticklabels() + ax_mgram.get_yticklabels()):

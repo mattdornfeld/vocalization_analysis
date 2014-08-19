@@ -12,7 +12,6 @@ from IPython import embed
 from functools import partial
 import brewer2mpl as brew
 from collections import OrderedDict
-from raw import *
 
 fig_width_pt = 400.0  # Get this from LaTeX using \showthe\columnwidth
 inches_per_pt = 1.0/72.27               # Convert pt to inch

@@ -63,8 +63,8 @@ def plot_results():
 	ji = jump_interface.JumpInterface(DB_PATH)
 	rats = ['V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V15', 'V17', 'V18', 
 	'V31', 'V32']
-	labels = ['V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V15', 'V17', 'V18', 
-	'V31', 'V32', 'edge tone', 'shallow cavity', 'deep cavity', 'hole tone']
+	labels = ['rat 1', 'rat 2', 'rat 3', 'rat 4', 'rat 5', 'rat 6', 'rat 7', 'rat 8', 'rat 9', 
+	'rat 10', 'rat 11', 'edge tone', 'shallow cavity', 'deep cavity', 'hole tone']
 	whistles = [('edge tone',-0.54), ('shallow cavity',-0.17), ('deep cavity',0.08), ('hole tone',0.25)]
 	whistles = OrderedDict(whistles)
 	initials = [[.61,0],[0.38,0],[.36,0],[0.2,0],[0.28,0],[0.43,0],[0.5,0],[.25,0],[0.4,0],[0.39,0],[0.64,0]]
@@ -93,6 +93,7 @@ def plot_results():
 
 	i = 1
 	for rat, initial in zip(rats, initials):
+		print(rat)
 		f = '/home/matthew/Dropbox/Work/vocalization_analysis/resampled_theta/'+ rat + '_measurements.npy'
 		data = np.load(f)
 		jumps = ji.get_jumps(rat)
